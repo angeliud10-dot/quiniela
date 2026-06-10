@@ -84,6 +84,8 @@
       { id: 'MEX_M3', date: 'Mié 24 Jun 2026', time: '8:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'CZE', title: 'Definición de Grupo' }
     ];
 
+    const DEADLINE = new Date('2026-06-11T10:00:00-05:00'); // 10 AM CDT, antes del Partido Inaugural
+
     const GOAL_INTERVALS = [
       { id: '1T-15', label: "1'–15'", half: '1T' }, { id: '1T-30', label: "16'–30'", half: '1T' },
       { id: '1T-45', label: "31'–45'+", half: '1T' }, { id: '2T-60', label: "46'–60'", half: '2T' },
@@ -164,6 +166,14 @@
       const [showAdminPin, setShowAdminPin] = useState(false);
       const [pendingAdminTab, setPendingAdminTab] = useState(null);
       const [saving, setSaving] = useState(false);
+      const [isPastDeadline, setIsPastDeadline] = useState(() => Date.now() >= DEADLINE.getTime());
+      useEffect(() => {
+        if (isPastDeadline) return;
+        const ms = DEADLINE.getTime() - Date.now();
+        if (ms <= 0) { setIsPastDeadline(true); return; }
+        const t = setTimeout(() => setIsPastDeadline(true), ms);
+        return () => clearTimeout(t);
+      }, [isPastDeadline]);
 
       const showToast = useCallback((message, type = 'success') => {
         setNotification({ message, type });
@@ -278,6 +288,7 @@
       // ── SCORE / INTERVAL / QUALIFIER HANDLERS ────────────────────────────────
 
       const handleScoreChange = async (matchId, side, value, isAdmin = false) => {
+        if (!isAdmin && isPastDeadline) { showToast('La quiniela está cerrada. No se aceptan cambios.', 'info'); return; }
         const clean = value === '' ? '' : Math.max(0, parseInt(value) || 0).toString();
         if (isAdmin) {
           const next = { ...realResults, mexico: { ...realResults.mexico, [matchId]: { ...(realResults.mexico[matchId] || {}), [side]: clean } } };
@@ -300,6 +311,7 @@
       };
 
       const handleIntervalChange = async (matchId, intervalId, isAdmin = false) => {
+        if (!isAdmin && isPastDeadline) { showToast('La quiniela está cerrada. No se aceptan cambios.', 'info'); return; }
         if (isAdmin) {
           const next = { ...realResults, mexico: { ...realResults.mexico, [matchId]: { ...(realResults.mexico[matchId] || {}), interval: intervalId } } };
           setRealResults(next);
@@ -313,6 +325,7 @@
       };
 
       const toggleQualifier = async (groupLetter, teamCode, isAdmin = false) => {
+        if (!isAdmin && isPastDeadline) { showToast('La quiniela está cerrada. No se aceptan cambios.', 'info'); return; }
         if (isAdmin) {
           const cur = realResults.qualifiers?.[groupLetter] || [];
           const next = cur.includes(teamCode) ? cur.filter(t => t !== teamCode)
@@ -596,6 +609,19 @@
                   </div>
                 </div>
 
+                {/* Banner de cierre */}
+                {isPastDeadline ? (
+                  <div className="flex items-center gap-3 bg-red-950/60 border border-red-500/50 rounded-2xl px-4 py-3.5">
+                    <span className="text-2xl shrink-0">🔒</span>
+                    <div>
+                      <p className="text-xs font-black text-red-300 uppercase tracking-wide">Quiniela cerrada</p>
+                      <p className="text-[10px] text-red-400/80 font-medium mt-0.5">El plazo venció el 11 Jun a las 10:00 AM. Ya no se pueden modificar pronósticos.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <DeadlineCountdown deadline={DEADLINE} />
+                )}
+
                 {/* Sistema de puntos */}
                 <PointsGuide />
 
@@ -616,6 +642,7 @@
                           match={match}
                           pred={pred}
                           isAdmin={false}
+                          locked={isPastDeadline}
                           onScoreChange={(side, val) => handleScoreChange(match.id, side, val)}
                           onAdjust={(side, d) => adjustScore(match.id, side, d)}
                           onInterval={id => handleIntervalChange(match.id, id)}
@@ -645,6 +672,7 @@
                     teams={GROUPS_CONFIG[selectedGroup]}
                     selected={selectedPlayer?.predictions?.qualifiers?.[selectedGroup] || []}
                     onToggle={code => toggleQualifier(selectedGroup, code)}
+                    locked={isPastDeadline}
                   />
                 </div>
               </div>
@@ -945,6 +973,40 @@
       );
     }
 
+    // ── DEADLINE COUNTDOWN ────────────────────────────────────────────────────────
+
+    function DeadlineCountdown({ deadline }) {
+      const [timeLeft, setTimeLeft] = React.useState(() => deadline.getTime() - Date.now());
+      React.useEffect(() => {
+        const t = setInterval(() => setTimeLeft(deadline.getTime() - Date.now()), 1000);
+        return () => clearInterval(t);
+      }, [deadline]);
+      if (timeLeft <= 0) return null;
+      const total = Math.floor(timeLeft / 1000);
+      const d = Math.floor(total / 86400);
+      const h = Math.floor((total % 86400) / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total % 60;
+      const pad = n => String(n).padStart(2, '0');
+      return (
+        <div className="flex items-center gap-3 bg-emerald-950/60 border border-emerald-700/50 rounded-2xl px-4 py-3">
+          <span className="text-xl shrink-0">⏳</span>
+          <div className="flex-1">
+            <p className="text-[9px] font-black uppercase text-emerald-400 tracking-wide">Tiempo para llenar tu quiniela</p>
+            <p className="text-[9px] text-slate-400 mt-0.5">Cierra el <span className="text-amber-300 font-bold">11 Jun 2026 a las 10:00 AM</span></p>
+          </div>
+          <div className="flex items-center gap-1 font-black text-amber-300 tabular-nums">
+            {d > 0 && <><span className="text-sm">{d}d</span><span className="text-slate-600 mx-0.5">:</span></>}
+            <span className="text-sm">{pad(h)}h</span>
+            <span className="text-slate-600 mx-0.5">:</span>
+            <span className="text-sm">{pad(m)}m</span>
+            <span className="text-slate-600 mx-0.5">:</span>
+            <span className="text-sm">{pad(s)}s</span>
+          </div>
+        </div>
+      );
+    }
+
     // ── POINTS GUIDE ─────────────────────────────────────────────────────────────
 
     function PointsGuide() {
@@ -990,8 +1052,8 @@
 
     // ── MATCH CARD ────────────────────────────────────────────────────────────────
 
-    function MatchCard({ match, pred, isAdmin, onScoreChange, onAdjust, onInterval, adminStyle }) {
-      const borderClass = adminStyle ? 'border-amber-500/30' : 'border-emerald-800/30';
+    function MatchCard({ match, pred, isAdmin, locked, onScoreChange, onAdjust, onInterval, adminStyle }) {
+      const borderClass = locked ? 'border-red-900/40' : adminStyle ? 'border-amber-500/30' : 'border-emerald-800/30';
       return (
         <div className={`bg-slate-900/80 border ${borderClass} rounded-2xl p-4 flex flex-col space-y-4`}>
           <div>
@@ -1004,12 +1066,12 @@
             <div className="flex items-center gap-3 px-3 py-2.5 border-b border-emerald-900/30">
               <Flag code={match.home} className="w-8 h-5 shrink-0" />
               <span className="text-xs font-black text-slate-100 flex-1">{TEAMS_DB[match.home].name}</span>
-              <ScoreInput value={pred.home} onChange={v => onScoreChange('home', v)} onAdjust={d => onAdjust('home', d)} />
+              <ScoreInput value={pred.home} onChange={v => onScoreChange('home', v)} onAdjust={d => onAdjust('home', d)} disabled={locked} />
             </div>
             <div className="flex items-center gap-3 px-3 py-2.5">
               <Flag code={match.away} className="w-8 h-5 shrink-0" />
               <span className="text-xs font-black text-slate-100 flex-1">{TEAMS_DB[match.away].name}</span>
-              <ScoreInput value={pred.away} onChange={v => onScoreChange('away', v)} onAdjust={d => onAdjust('away', d)} />
+              <ScoreInput value={pred.away} onChange={v => onScoreChange('away', v)} onAdjust={d => onAdjust('away', d)} disabled={locked} />
             </div>
           </div>
           {/* Interval picker */}
@@ -1020,7 +1082,7 @@
                 <span className="block text-[8px] uppercase text-emerald-500 font-extrabold mb-1">Primer Tiempo</span>
                 <div className="grid grid-cols-3 gap-1">
                   {GOAL_INTERVALS.filter(o => o.half === '1T').map(opt => (
-                    <button key={opt.id} onClick={() => onInterval(opt.id)} className={`py-1 rounded text-[9px] font-extrabold border truncate px-0.5 transition-colors ${pred.interval === opt.id ? 'bg-amber-400 text-emerald-950 border-amber-400' : 'bg-emerald-900/10 border-emerald-800/30 text-slate-300 hover:border-emerald-600'}`}>{opt.label}</button>
+                    <button key={opt.id} onClick={() => !locked && onInterval(opt.id)} disabled={locked} className={`py-1 rounded text-[9px] font-extrabold border truncate px-0.5 transition-colors ${locked ? 'opacity-50 cursor-not-allowed' : ''} ${pred.interval === opt.id ? 'bg-amber-400 text-emerald-950 border-amber-400' : 'bg-emerald-900/10 border-emerald-800/30 text-slate-300 hover:border-emerald-600'}`}>{opt.label}</button>
                   ))}
                 </div>
               </div>
@@ -1028,7 +1090,7 @@
                 <span className="block text-[8px] uppercase text-emerald-500 font-extrabold mb-1">Segundo Tiempo / Sin Goles</span>
                 <div className="grid grid-cols-4 gap-1">
                   {GOAL_INTERVALS.filter(o => o.half === '2T' || o.half === 'NONE').map(opt => (
-                    <button key={opt.id} onClick={() => onInterval(opt.id)} className={`py-1 rounded text-[9px] font-extrabold border truncate px-0.5 transition-colors ${pred.interval === opt.id ? 'bg-amber-400 text-emerald-950 border-amber-400' : 'bg-emerald-900/10 border-emerald-800/30 text-slate-300 hover:border-emerald-600'}`}>{opt.half === 'NONE' ? '0-0' : opt.label}</button>
+                    <button key={opt.id} onClick={() => !locked && onInterval(opt.id)} disabled={locked} className={`py-1 rounded text-[9px] font-extrabold border truncate px-0.5 transition-colors ${locked ? 'opacity-50 cursor-not-allowed' : ''} ${pred.interval === opt.id ? 'bg-amber-400 text-emerald-950 border-amber-400' : 'bg-emerald-900/10 border-emerald-800/30 text-slate-300 hover:border-emerald-600'}`}>{opt.half === 'NONE' ? '0-0' : opt.label}</button>
                   ))}
                 </div>
               </div>
@@ -1042,39 +1104,40 @@
                 <span className="text-[9px] text-slate-200 font-bold">🚩 Tiros de esquina</span>
                 <span className="block text-[8px] text-emerald-500 font-bold">+2 pts si aciertas</span>
               </div>
-              <ScoreInput value={pred.corners} onChange={v => onScoreChange('corners', v)} onAdjust={d => onAdjust('corners', d)} />
+              <ScoreInput value={pred.corners} onChange={v => onScoreChange('corners', v)} onAdjust={d => onAdjust('corners', d)} disabled={locked} />
             </div>
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[9px] text-yellow-300 font-bold">🟨 Tarjetas amarillas</span>
                 <span className="block text-[8px] text-emerald-500 font-bold">+2 pts si aciertas</span>
               </div>
-              <ScoreInput value={pred.yellowCards} onChange={v => onScoreChange('yellowCards', v)} onAdjust={d => onAdjust('yellowCards', d)} />
+              <ScoreInput value={pred.yellowCards} onChange={v => onScoreChange('yellowCards', v)} onAdjust={d => onAdjust('yellowCards', d)} disabled={locked} />
             </div>
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[9px] text-red-400 font-bold">🟥 Tarjetas rojas</span>
                 <span className="block text-[8px] text-emerald-500 font-bold">+1 pt si aciertas</span>
               </div>
-              <ScoreInput value={pred.redCards} onChange={v => onScoreChange('redCards', v)} onAdjust={d => onAdjust('redCards', d)} />
+              <ScoreInput value={pred.redCards} onChange={v => onScoreChange('redCards', v)} onAdjust={d => onAdjust('redCards', d)} disabled={locked} />
             </div>
           </div>
         </div>
       );
     }
 
-    function ScoreInput({ value, onChange, onAdjust }) {
+    function ScoreInput({ value, onChange, onAdjust, disabled }) {
       return (
-        <div className="flex items-center bg-emerald-900/10 border border-emerald-800 rounded-md py-0.5 px-1">
-          <button onClick={() => onAdjust(-1)} className="w-5 h-5 flex items-center justify-center text-xs font-extrabold text-emerald-300 hover:text-amber-400 bg-slate-900 rounded">-</button>
+        <div className={`flex items-center bg-emerald-900/10 border border-emerald-800 rounded-md py-0.5 px-1 ${disabled ? 'opacity-50' : ''}`}>
+          <button onClick={() => !disabled && onAdjust(-1)} disabled={disabled} className={`w-5 h-5 flex items-center justify-center text-xs font-extrabold text-emerald-300 bg-slate-900 rounded ${disabled ? 'cursor-not-allowed' : 'hover:text-amber-400'}`}>-</button>
           <input
             type="number"
             value={value !== undefined && value !== '' ? value : '0'}
-            onChange={e => onChange(e.target.value)}
-            className="w-8 text-center bg-transparent border-none text-xs font-black text-amber-300 focus:outline-none p-0 mx-1"
+            onChange={e => !disabled && onChange(e.target.value)}
+            readOnly={disabled}
+            className={`w-8 text-center bg-transparent border-none text-xs font-black text-amber-300 focus:outline-none p-0 mx-1 ${disabled ? 'cursor-not-allowed' : ''}`}
             min="0"
           />
-          <button onClick={() => onAdjust(1)} className="w-5 h-5 flex items-center justify-center text-xs font-extrabold text-emerald-300 hover:text-amber-400 bg-slate-900 rounded">+</button>
+          <button onClick={() => !disabled && onAdjust(1)} disabled={disabled} className={`w-5 h-5 flex items-center justify-center text-xs font-extrabold text-emerald-300 bg-slate-900 rounded ${disabled ? 'cursor-not-allowed' : 'hover:text-amber-400'}`}>+</button>
         </div>
       );
     }
@@ -1097,17 +1160,17 @@
       );
     }
 
-    function GroupGrid({ groupLetter, teams, selected, onToggle, adminStyle }) {
+    function GroupGrid({ groupLetter, teams, selected, onToggle, adminStyle, locked }) {
       const borderActive = adminStyle ? 'bg-amber-500/10 border-amber-400' : 'bg-amber-400/10 border-amber-400';
       const tagActive = adminStyle ? 'bg-amber-500 text-slate-950' : 'bg-amber-400 text-emerald-950';
       return (
         <div className={`bg-slate-900/60 border ${adminStyle ? 'border-amber-500/20' : 'border-emerald-800/40'} rounded-2xl p-4 sm:p-6`}>
-          <h3 className="text-sm font-black text-emerald-100 mb-4">⚽ Grupo {groupLetter}</h3>
+          <h3 className="text-sm font-black text-emerald-100 mb-4">⚽ Grupo {groupLetter} {locked && <span className="text-[9px] text-red-400 font-bold ml-1">🔒 Cerrado</span>}</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {teams.map(code => {
               const isSelected = selected.includes(code);
               return (
-                <button key={code} onClick={() => onToggle(code)} className={`p-3.5 rounded-xl border text-center flex flex-col items-center justify-center space-y-2.5 transition-all ${isSelected ? `${borderActive} shadow-md scale-[1.02]` : 'bg-emerald-950/20 border-emerald-900/40 hover:bg-emerald-900/10'}`}>
+                <button key={code} onClick={() => !locked && onToggle(code)} disabled={locked} className={`p-3.5 rounded-xl border text-center flex flex-col items-center justify-center space-y-2.5 transition-all ${locked ? 'opacity-60 cursor-not-allowed' : ''} ${isSelected ? `${borderActive} shadow-md scale-[1.02]` : 'bg-emerald-950/20 border-emerald-900/40 hover:bg-emerald-900/10'}`}>
                   <Flag code={code} className="w-12 h-8" />
                   <p className="text-xs font-extrabold text-slate-100">{TEAMS_DB[code].name}</p>
                   {isSelected
