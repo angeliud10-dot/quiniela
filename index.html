@@ -405,8 +405,9 @@
 
       // ── POINTS ────────────────────────────────────────────────────────────────
 
+      // Puntos base por jugador (sin bonus de minuto)
       const calculatePoints = (player) => {
-        let totalPoints = 0, exactScores = 0, correctOutcomes = 0, correctIntervals = 0, correctHalves = 0, correctQualifiers = 0, correctCorners = 0, correctYellowCards = 0, correctRedCards = 0;
+        let totalPoints = 0, exactScores = 0, correctOutcomes = 0, correctQualifiers = 0, correctCorners = 0, correctYellowCards = 0, correctRedCards = 0;
         MEXICO_MATCHES.forEach(match => {
           const pred = player.predictions?.mexico?.[match.id] || {};
           const real = realResults.mexico?.[match.id] || {};
@@ -416,16 +417,6 @@
             const pH = parseInt(pred.home), pA = parseInt(pred.away), rH = parseInt(real.home), rA = parseInt(real.away);
             if (pH === rH && pA === rA) { totalPoints += 3; exactScores++; }
             else if ((pH > pA && rH > rA) || (pH < pA && rH < rA) || (pH === pA && rH === rA)) { totalPoints += 1; correctOutcomes++; }
-            if (pred.interval && real.interval) {
-              if (pred.interval === real.interval) {
-                totalPoints += 2; correctIntervals++;
-                if (pred.interval !== 'NONE') correctHalves++;
-              } else if (pred.interval !== 'NONE' && real.interval !== 'NONE') {
-                const pHalf = parseInt(pred.interval) <= 45 ? '1T' : '2T';
-                const rHalf = parseInt(real.interval) <= 45 ? '1T' : '2T';
-                if (pHalf === rHalf) { totalPoints += 1; correctHalves++; }
-              }
-            }
           }
           if (pred.corners !== undefined && pred.corners !== '' && real.corners !== undefined && real.corners !== '') {
             if (parseInt(pred.corners) === parseInt(real.corners)) { totalPoints += 2; correctCorners++; }
@@ -442,12 +433,35 @@
           const rq = realResults.qualifiers?.[g] || [];
           pq.forEach(t => { if (rq.includes(t)) { totalPoints += 2; correctQualifiers++; } });
         });
-        return { totalPoints, exactScores, correctOutcomes, correctIntervals, correctHalves, correctQualifiers, correctCorners, correctYellowCards, correctRedCards };
+        return { totalPoints, exactScores, correctOutcomes, correctQualifiers, correctCorners, correctYellowCards, correctRedCards };
       };
 
+      // Bonus de minuto: por cada partido, el/los jugadores más cercanos al minuto real del 1er gol reciben +2 pts
+      const computeMinuteBonuses = useCallback((players) => {
+        const bonuses = {};
+        const wins = {};
+        players.forEach(p => { bonuses[p.id] = 0; wins[p.id] = 0; });
+        MEXICO_MATCHES.forEach(match => {
+          const realMin = parseInt(realResults.mexico?.[match.id]?.interval);
+          if (!realMin || isNaN(realMin)) return;
+          const entries = players.map(p => {
+            const v = p.predictions?.mexico?.[match.id]?.interval;
+            const m = parseInt(v);
+            return { id: p.id, dist: (!v || v === '' || isNaN(m)) ? Infinity : Math.abs(m - realMin) };
+          });
+          const best = Math.min(...entries.map(e => e.dist));
+          if (best === Infinity) return;
+          entries.filter(e => e.dist === best).forEach(e => { bonuses[e.id] += 2; wins[e.id]++; });
+        });
+        return { bonuses, wins };
+      }, [realResults]);
+
       const leaderboard = useMemo(() => {
-        return participants.map(p => ({ ...p, ...calculatePoints(p) }))
-          .sort((a, b) => b.totalPoints !== a.totalPoints ? b.totalPoints - a.totalPoints
+        const { bonuses, wins } = computeMinuteBonuses(participants);
+        return participants.map(p => {
+          const stats = calculatePoints(p);
+          return { ...p, ...stats, totalPoints: stats.totalPoints + (bonuses[p.id] || 0), minuteWins: wins[p.id] || 0 };
+        }).sort((a, b) => b.totalPoints !== a.totalPoints ? b.totalPoints - a.totalPoints
             : b.exactScores !== a.exactScores ? b.exactScores - a.exactScores
             : a.name.localeCompare(b.name));
       }, [participants, realResults]);
@@ -898,15 +912,19 @@
                     <button onClick={() => setInspectedPlayerId(null)} className="bg-slate-800 hover:bg-red-900 text-white font-bold w-8 h-8 rounded-full flex items-center justify-center text-xs transition-colors">✕</button>
                   </div>
                   <div className="p-4 sm:p-6 space-y-6">
+                    {(() => {
+                      const { bonuses, wins } = computeMinuteBonuses(participants);
+                      const fullStats = { ...stats, totalPoints: stats.totalPoints + (bonuses[player.id] || 0), minuteWins: wins[player.id] || 0 };
+                      return (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                       {[
-                        { label: 'Puntos Totales', value: `${stats.totalPoints} pts`, color: 'text-amber-400' },
-                        { label: 'Marcadores Exactos', value: `${stats.exactScores} ×`, color: 'text-white' },
-                        { label: 'Minuto de Gol', value: `${stats.correctIntervals} ×`, color: 'text-white' },
-                        { label: 'Clasificados', value: `${stats.correctQualifiers} ×`, color: 'text-white' },
-                        { label: '🚩 Córners', value: `${stats.correctCorners} ×`, color: 'text-white' },
-                        { label: '🟨 T. Amarillas', value: `${stats.correctYellowCards} ×`, color: 'text-white' },
-                        { label: '🟥 T. Rojas', value: `${stats.correctRedCards} ×`, color: 'text-white' },
+                        { label: 'Puntos Totales', value: `${fullStats.totalPoints} pts`, color: 'text-amber-400' },
+                        { label: 'Marcadores Exactos', value: `${fullStats.exactScores} ×`, color: 'text-white' },
+                        { label: '⏱️ Minuto más cercano', value: `${fullStats.minuteWins} ×`, color: 'text-white' },
+                        { label: 'Clasificados', value: `${fullStats.correctQualifiers} ×`, color: 'text-white' },
+                        { label: '🚩 Córners', value: `${fullStats.correctCorners} ×`, color: 'text-white' },
+                        { label: '🟨 T. Amarillas', value: `${fullStats.correctYellowCards} ×`, color: 'text-white' },
+                        { label: '🟥 T. Rojas', value: `${fullStats.correctRedCards} ×`, color: 'text-white' },
                       ].map(s => (
                         <div key={s.label} className="bg-emerald-900/10 border border-emerald-500/20 p-3 rounded-xl text-center">
                           <span className="block text-[8px] text-emerald-400 uppercase font-black mb-1">{s.label}</span>
@@ -914,6 +932,8 @@
                         </div>
                       ))}
                     </div>
+                      );
+                    })()}
                     {/* Mexico matches detail */}
                     <div className="space-y-3">
                       <h4 className="text-xs font-black text-amber-300 uppercase tracking-wider border-b border-emerald-900/60 pb-1.5 flex items-center gap-1.5">🇲🇽 Partidos de México</h4>
@@ -948,10 +968,27 @@
                                   <Flag code={match.away} className="w-5 h-3" />
                                 </div>
                               </div>
-                              <div className="text-[9px] text-slate-400 flex justify-between bg-slate-950/50 p-1.5 rounded">
-                                <span>⏱️</span>
-                                <span className="font-bold text-slate-300">{pred.interval ? (pred.interval === 'NONE' ? '0-0 Sin goles' : `Min. ${pred.interval}'`) : 'Sin elegir'}</span>
-                              </div>
+                              {(() => {
+                                const realMin = parseInt(real.interval);
+                                const predMin = parseInt(pred.interval);
+                                const hasRealMin = !isNaN(realMin);
+                                const hasPredMin = pred.interval && pred.interval !== '' && !isNaN(predMin);
+                                const dist = hasPredMin && hasRealMin ? Math.abs(predMin - realMin) : null;
+                                const isWinner = dist !== null && dist === Math.min(...participants.map(p2 => {
+                                  const v = parseInt(p2.predictions?.mexico?.[match.id]?.interval);
+                                  return (!p2.predictions?.mexico?.[match.id]?.interval || isNaN(v)) ? Infinity : Math.abs(v - realMin);
+                                }));
+                                return (
+                                  <div className={`text-[9px] flex justify-between p-1.5 rounded ${isWinner ? 'bg-amber-400/15 border border-amber-500/30' : 'bg-slate-950/50'}`}>
+                                    <span>{isWinner ? '🏆' : '⏱️'}</span>
+                                    <span className={`font-bold ${isWinner ? 'text-amber-300' : 'text-slate-300'}`}>
+                                      {hasPredMin ? `Min. ${pred.interval}'` : 'Sin elegir'}
+                                      {dist !== null && ` (±${dist}')`}
+                                      {isWinner && ' +2pts'}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                               <div className="text-[9px] grid grid-cols-3 gap-1">
                                 <div className="bg-slate-950/50 p-1 rounded text-center">
                                   <span className="block text-slate-500">🚩</span>
@@ -1013,7 +1050,7 @@
       const rows = [
         { icon: '🎯', label: 'Marcador exacto',             pts: '+3', color: 'text-amber-300' },
         { icon: '✅', label: 'Resultado correcto (G/E/P)',   pts: '+1', color: 'text-emerald-300' },
-        { icon: '⏱️', label: 'Minuto del 1er gol (exacto)', pts: '+2', color: 'text-amber-300' },
+        { icon: '⏱️', label: 'Más cercano al 1er gol',     pts: '+2', color: 'text-amber-300' },
         { icon: '🚩', label: 'Tiros de esquina (exacto)',    pts: '+2', color: 'text-amber-300' },
         { icon: '🟨', label: 'Tarjetas amarillas (exacto)',  pts: '+2', color: 'text-amber-300' },
         { icon: '🟥', label: 'Tarjetas rojas (exacto)',      pts: '+1', color: 'text-emerald-300' },
@@ -1081,36 +1118,30 @@
           {/* Minuto del primer gol — ingreso manual */}
           <div className="bg-slate-950 p-3 rounded-xl space-y-2.5 border border-emerald-900/60">
             <span className="block text-[8px] font-black uppercase text-amber-400">⏱️ Minuto del Primer Gol:</span>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 flex items-center gap-1.5 bg-emerald-900/10 border border-emerald-800 rounded-md py-1.5 px-2">
-                <button
-                  onClick={() => { if (!locked && pred.interval !== 'NONE') { const v = Math.max(1, (parseInt(pred.interval) || 1) - 1); onInterval(String(v)); } }}
-                  disabled={locked || pred.interval === 'NONE'}
-                  className={`w-5 h-5 flex items-center justify-center text-xs font-extrabold text-emerald-300 bg-slate-900 rounded shrink-0 ${locked || pred.interval === 'NONE' ? 'opacity-40 cursor-not-allowed' : 'hover:text-amber-400'}`}
-                >-</button>
-                <input
-                  type="number"
-                  min="1" max="120"
-                  value={pred.interval && pred.interval !== 'NONE' ? pred.interval : ''}
-                  onChange={e => { if (!locked) { const v = e.target.value; if (v === '') onInterval(''); else onInterval(String(Math.max(1, Math.min(120, parseInt(v) || 1)))); } }}
-                  readOnly={locked || pred.interval === 'NONE'}
-                  placeholder={pred.interval === 'NONE' ? '—' : 'Min.'}
-                  className={`flex-1 min-w-0 text-center bg-transparent border-none text-xs font-black text-amber-300 focus:outline-none p-0 ${locked || pred.interval === 'NONE' ? 'cursor-not-allowed opacity-50' : ''}`}
-                />
-                <button
-                  onClick={() => { if (!locked && pred.interval !== 'NONE') { const v = Math.min(120, (parseInt(pred.interval) || 0) + 1); onInterval(String(v)); } }}
-                  disabled={locked || pred.interval === 'NONE'}
-                  className={`w-5 h-5 flex items-center justify-center text-xs font-extrabold text-emerald-300 bg-slate-900 rounded shrink-0 ${locked || pred.interval === 'NONE' ? 'opacity-40 cursor-not-allowed' : 'hover:text-amber-400'}`}
-                >+</button>
-              </div>
+            <p className="text-[8px] text-slate-500">El más cercano gana +2 pts. Si hay empate en distancia, todos lo obtienen.</p>
+            <div className="flex items-center gap-1.5 bg-emerald-900/10 border border-emerald-800 rounded-md py-1.5 px-2">
               <button
-                onClick={() => { if (!locked) onInterval(pred.interval === 'NONE' ? '' : 'NONE'); }}
+                onClick={() => { if (!locked) { const v = Math.max(1, (parseInt(pred.interval) || 1) - 1); onInterval(String(v)); } }}
                 disabled={locked}
-                className={`shrink-0 px-3 py-1.5 rounded-md text-[9px] font-extrabold border transition-colors ${locked ? 'opacity-40 cursor-not-allowed' : ''} ${pred.interval === 'NONE' ? 'bg-amber-400 text-emerald-950 border-amber-400' : 'bg-emerald-900/10 border-emerald-800/30 text-slate-300 hover:border-emerald-600'}`}
-              >0–0 Sin goles</button>
+                className={`w-5 h-5 flex items-center justify-center text-xs font-extrabold text-emerald-300 bg-slate-900 rounded shrink-0 ${locked ? 'opacity-40 cursor-not-allowed' : 'hover:text-amber-400'}`}
+              >-</button>
+              <input
+                type="number"
+                min="1" max="120"
+                value={pred.interval && pred.interval !== '' ? pred.interval : ''}
+                onChange={e => { if (!locked) { const v = e.target.value; if (v === '') onInterval(''); else onInterval(String(Math.max(1, Math.min(120, parseInt(v) || 1)))); } }}
+                readOnly={locked}
+                placeholder="Min."
+                className={`flex-1 min-w-0 text-center bg-transparent border-none text-xs font-black text-amber-300 focus:outline-none p-0 ${locked ? 'cursor-not-allowed opacity-50' : ''}`}
+              />
+              <button
+                onClick={() => { if (!locked) { const v = Math.min(120, (parseInt(pred.interval) || 0) + 1); onInterval(String(v)); } }}
+                disabled={locked}
+                className={`w-5 h-5 flex items-center justify-center text-xs font-extrabold text-emerald-300 bg-slate-900 rounded shrink-0 ${locked ? 'opacity-40 cursor-not-allowed' : 'hover:text-amber-400'}`}
+              >+</button>
             </div>
-            {pred.interval && pred.interval !== 'NONE' && (
-              <p className="text-[9px] text-slate-400 font-medium">
+            {pred.interval && pred.interval !== '' && (
+              <p className="text-[9px] font-medium">
                 {parseInt(pred.interval) <= 45
                   ? <span>⚽ <span className="text-emerald-400 font-bold">Primer tiempo</span> — min. {pred.interval}'</span>
                   : <span>⚽ <span className="text-blue-400 font-bold">Segundo tiempo</span> — min. {pred.interval}'</span>}
