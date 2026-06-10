@@ -78,13 +78,13 @@
       K: ['POR', 'COL', 'UZB', 'COD'], L: ['ENG', 'CRO', 'GHA', 'PAN']
     };
 
+    // Deadlines en hora de México (UTC-6, sin horario de verano).
+    // M1: 12:00 PM del día inaugural. M2 y M3: una hora antes del silbatazo.
     const MEXICO_MATCHES = [
-      { id: 'MEX_M1', date: 'Jue 11 Jun 2026', time: '2:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'RSA', title: 'Partido Inaugural' },
-      { id: 'MEX_M2', date: 'Jue 18 Jun 2026', time: '8:00 PM CDT', stadium: 'Estadio Akron · Guadalajara', home: 'MEX', away: 'KOR', title: 'Segunda Jornada' },
-      { id: 'MEX_M3', date: 'Mié 24 Jun 2026', time: '8:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'CZE', title: 'Definición de Grupo' }
+      { id: 'MEX_M1', date: 'Jue 11 Jun 2026', time: '2:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'RSA', title: 'Partido Inaugural', deadline: '2026-06-11T12:00:00-06:00', deadlineLabel: '11 Jun · 12:00 PM' },
+      { id: 'MEX_M2', date: 'Jue 18 Jun 2026', time: '8:00 PM CDT', stadium: 'Estadio Akron · Guadalajara', home: 'MEX', away: 'KOR', title: 'Segunda Jornada', deadline: '2026-06-18T19:00:00-06:00', deadlineLabel: '18 Jun · 7:00 PM' },
+      { id: 'MEX_M3', date: 'Mié 24 Jun 2026', time: '8:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'CZE', title: 'Definición de Grupo', deadline: '2026-06-24T19:00:00-06:00', deadlineLabel: '24 Jun · 7:00 PM' }
     ];
-
-    const DEADLINE = new Date('2026-06-11T10:00:00-05:00'); // 10 AM CDT, antes del Partido Inaugural
 
     const GOAL_INTERVALS = [
       { id: '1T-15', label: "1'–15'", half: '1T' }, { id: '1T-30', label: "16'–30'", half: '1T' },
@@ -166,14 +166,12 @@
       const [showAdminPin, setShowAdminPin] = useState(false);
       const [pendingAdminTab, setPendingAdminTab] = useState(null);
       const [saving, setSaving] = useState(false);
-      const [isPastDeadline, setIsPastDeadline] = useState(() => Date.now() >= DEADLINE.getTime());
+      const [now, setNow] = useState(Date.now());
       useEffect(() => {
-        if (isPastDeadline) return;
-        const ms = DEADLINE.getTime() - Date.now();
-        if (ms <= 0) { setIsPastDeadline(true); return; }
-        const t = setTimeout(() => setIsPastDeadline(true), ms);
-        return () => clearTimeout(t);
-      }, [isPastDeadline]);
+        const t = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(t);
+      }, []);
+      const isMatchLocked = useCallback((match) => now >= new Date(match.deadline).getTime(), [now]);
 
       const showToast = useCallback((message, type = 'success') => {
         setNotification({ message, type });
@@ -288,7 +286,8 @@
       // ── SCORE / INTERVAL / QUALIFIER HANDLERS ────────────────────────────────
 
       const handleScoreChange = async (matchId, side, value, isAdmin = false) => {
-        if (!isAdmin && isPastDeadline) { showToast('La quiniela está cerrada. No se aceptan cambios.', 'info'); return; }
+        const m = MEXICO_MATCHES.find(x => x.id === matchId);
+        if (!isAdmin && m && isMatchLocked(m)) { showToast(`Este partido cerró el ${m.deadlineLabel}. Ya no se aceptan cambios.`, 'info'); return; }
         const clean = value === '' ? '' : Math.max(0, parseInt(value) || 0).toString();
         if (isAdmin) {
           const next = { ...realResults, mexico: { ...realResults.mexico, [matchId]: { ...(realResults.mexico[matchId] || {}), [side]: clean } } };
@@ -311,7 +310,8 @@
       };
 
       const handleIntervalChange = async (matchId, intervalId, isAdmin = false) => {
-        if (!isAdmin && isPastDeadline) { showToast('La quiniela está cerrada. No se aceptan cambios.', 'info'); return; }
+        const m = MEXICO_MATCHES.find(x => x.id === matchId);
+        if (!isAdmin && m && isMatchLocked(m)) { showToast(`Este partido cerró el ${m.deadlineLabel}. Ya no se aceptan cambios.`, 'info'); return; }
         if (isAdmin) {
           const next = { ...realResults, mexico: { ...realResults.mexico, [matchId]: { ...(realResults.mexico[matchId] || {}), interval: intervalId } } };
           setRealResults(next);
@@ -325,7 +325,7 @@
       };
 
       const toggleQualifier = async (groupLetter, teamCode, isAdmin = false) => {
-        if (!isAdmin && isPastDeadline) { showToast('La quiniela está cerrada. No se aceptan cambios.', 'info'); return; }
+        if (!isAdmin && selectedPlayer?.predictions?.qualifiersLocked) { showToast('Tus clasificados ya están guardados y bloqueados.', 'info'); return; }
         if (isAdmin) {
           const cur = realResults.qualifiers?.[groupLetter] || [];
           const next = cur.includes(teamCode) ? cur.filter(t => t !== teamCode)
@@ -341,6 +341,17 @@
             return { ...cur, qualifiers: { ...cur.qualifiers, [groupLetter]: ng } };
           });
         }
+      };
+
+      const handleLockQualifiers = async () => {
+        const totalSelected = Object.keys(GROUPS_CONFIG).reduce((acc, g) => acc + (selectedPlayer?.predictions?.qualifiers?.[g] || []).length, 0);
+        const totalNeeded = Object.keys(GROUPS_CONFIG).length * 2;
+        const warn = totalSelected < totalNeeded
+          ? `Aún te faltan grupos por completar (${totalSelected}/${totalNeeded}). `
+          : '';
+        if (!window.confirm(`${warn}Al guardar tus clasificados YA NO podrás modificarlos. Esta acción es permanente. ¿Continuar?`)) return;
+        await updatePredictions(selectedPlayerId, cur => ({ ...cur, qualifiersLocked: true }));
+        showToast('Clasificados guardados y bloqueados. Ya no se pueden editar.', 'success');
       };
 
       // ── ADMIN ACTIONS ─────────────────────────────────────────────────────────
@@ -609,18 +620,16 @@
                   </div>
                 </div>
 
-                {/* Banner de cierre */}
-                {isPastDeadline ? (
-                  <div className="flex items-center gap-3 bg-red-950/60 border border-red-500/50 rounded-2xl px-4 py-3.5">
-                    <span className="text-2xl shrink-0">🔒</span>
-                    <div>
-                      <p className="text-xs font-black text-red-300 uppercase tracking-wide">Quiniela cerrada</p>
-                      <p className="text-[10px] text-red-400/80 font-medium mt-0.5">El plazo venció el 11 Jun a las 10:00 AM. Ya no se pueden modificar pronósticos.</p>
-                    </div>
+                {/* Banner informativo de cierres por partido */}
+                <div className="flex items-start gap-3 bg-emerald-950/60 border border-emerald-700/50 rounded-2xl px-4 py-3">
+                  <span className="text-xl shrink-0">⏳</span>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-emerald-400 tracking-wide">Plazos de cierre (hora de México)</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                      Cada partido se bloquea por separado: <span className="text-amber-300 font-bold">inaugural el 11 Jun a las 12:00 PM</span> · los partidos vs Corea y Rep. Checa cierran <span className="text-amber-300 font-bold">una hora antes del silbatazo</span>. Los clasificados se bloquean cuando los guardes.
+                    </p>
                   </div>
-                ) : (
-                  <DeadlineCountdown deadline={DEADLINE} />
-                )}
+                </div>
 
                 {/* Sistema de puntos */}
                 <PointsGuide />
@@ -642,7 +651,7 @@
                           match={match}
                           pred={pred}
                           isAdmin={false}
-                          locked={isPastDeadline}
+                          locked={isMatchLocked(match)}
                           onScoreChange={(side, val) => handleScoreChange(match.id, side, val)}
                           onAdjust={(side, d) => adjustScore(match.id, side, d)}
                           onInterval={id => handleIntervalChange(match.id, id)}
@@ -653,6 +662,9 @@
                 </div>
 
                 {/* Clasificados por grupo */}
+                {(() => {
+                  const qualifiersLocked = !!selectedPlayer?.predictions?.qualifiersLocked;
+                  return (
                 <div className="space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-emerald-800/40 pb-2 gap-2">
                     <div className="flex items-center gap-2">
@@ -661,6 +673,27 @@
                     </div>
                     <span className="text-[9px] bg-slate-900 border border-amber-400/30 text-amber-300 font-bold px-2.5 py-1 rounded-full">Elige 2 por grupo</span>
                   </div>
+                  {qualifiersLocked ? (
+                    <div className="flex items-center gap-3 bg-red-950/60 border border-red-500/50 rounded-2xl px-4 py-3">
+                      <span className="text-xl shrink-0">🔒</span>
+                      <div>
+                        <p className="text-xs font-black text-red-300 uppercase tracking-wide">Clasificados bloqueados</p>
+                        <p className="text-[10px] text-red-400/80 font-medium mt-0.5">Ya guardaste tus clasificados. No se pueden modificar.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 bg-amber-950/30 border border-amber-500/30 rounded-2xl px-4 py-3">
+                      <p className="text-[10px] text-amber-200/90 font-medium leading-relaxed flex-1">
+                        Cuando termines, guarda tus clasificados. <span className="font-black">Una vez guardados ya no podrás cambiarlos.</span>
+                      </p>
+                      <button
+                        onClick={handleLockQualifiers}
+                        className="shrink-0 bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black px-4 py-2.5 rounded-xl text-xs uppercase tracking-wide transition-colors shadow-lg"
+                      >
+                        💾 Guardar
+                      </button>
+                    </div>
+                  )}
                   <GroupTabs
                     groups={GROUPS_CONFIG}
                     selectedGroup={selectedGroup}
@@ -672,9 +705,11 @@
                     teams={GROUPS_CONFIG[selectedGroup]}
                     selected={selectedPlayer?.predictions?.qualifiers?.[selectedGroup] || []}
                     onToggle={code => toggleQualifier(selectedGroup, code)}
-                    locked={isPastDeadline}
+                    locked={qualifiersLocked}
                   />
                 </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -973,40 +1008,6 @@
       );
     }
 
-    // ── DEADLINE COUNTDOWN ────────────────────────────────────────────────────────
-
-    function DeadlineCountdown({ deadline }) {
-      const [timeLeft, setTimeLeft] = React.useState(() => deadline.getTime() - Date.now());
-      React.useEffect(() => {
-        const t = setInterval(() => setTimeLeft(deadline.getTime() - Date.now()), 1000);
-        return () => clearInterval(t);
-      }, [deadline]);
-      if (timeLeft <= 0) return null;
-      const total = Math.floor(timeLeft / 1000);
-      const d = Math.floor(total / 86400);
-      const h = Math.floor((total % 86400) / 3600);
-      const m = Math.floor((total % 3600) / 60);
-      const s = total % 60;
-      const pad = n => String(n).padStart(2, '0');
-      return (
-        <div className="flex items-center gap-3 bg-emerald-950/60 border border-emerald-700/50 rounded-2xl px-4 py-3">
-          <span className="text-xl shrink-0">⏳</span>
-          <div className="flex-1">
-            <p className="text-[9px] font-black uppercase text-emerald-400 tracking-wide">Tiempo para llenar tu quiniela</p>
-            <p className="text-[9px] text-slate-400 mt-0.5">Cierra el <span className="text-amber-300 font-bold">11 Jun 2026 a las 10:00 AM</span></p>
-          </div>
-          <div className="flex items-center gap-1 font-black text-amber-300 tabular-nums">
-            {d > 0 && <><span className="text-sm">{d}d</span><span className="text-slate-600 mx-0.5">:</span></>}
-            <span className="text-sm">{pad(h)}h</span>
-            <span className="text-slate-600 mx-0.5">:</span>
-            <span className="text-sm">{pad(m)}m</span>
-            <span className="text-slate-600 mx-0.5">:</span>
-            <span className="text-sm">{pad(s)}s</span>
-          </div>
-        </div>
-      );
-    }
-
     // ── POINTS GUIDE ─────────────────────────────────────────────────────────────
 
     function PointsGuide() {
@@ -1057,7 +1058,12 @@
       return (
         <div className={`bg-slate-900/80 border ${borderClass} rounded-2xl p-4 flex flex-col space-y-4`}>
           <div>
-            <span className="text-[8px] bg-emerald-950 text-emerald-400 font-extrabold px-2 py-0.5 rounded border border-emerald-900">{match.title}</span>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[8px] bg-emerald-950 text-emerald-400 font-extrabold px-2 py-0.5 rounded border border-emerald-900">{match.title}</span>
+              {!isAdmin && (locked
+                ? <span className="text-[8px] bg-red-500/20 text-red-300 font-black px-2 py-0.5 rounded border border-red-500/40">🔒 Cerrado</span>
+                : <span className="text-[8px] bg-amber-400/15 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-500/30">Cierra {match.deadlineLabel}</span>)}
+            </div>
             <p className="text-[10px] text-slate-400 mt-1 font-semibold">📍 {match.stadium}</p>
             <p className="text-[10px] text-amber-400/80 font-bold mt-0.5">🗓 {match.date} · ⏰ {match.time}</p>
           </div>
