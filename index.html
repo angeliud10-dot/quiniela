@@ -386,7 +386,7 @@
       // ── POINTS ────────────────────────────────────────────────────────────────
 
       const calculatePoints = (player) => {
-        let totalPoints = 0, exactScores = 0, correctOutcomes = 0, correctIntervals = 0, correctHalves = 0, correctQualifiers = 0;
+        let totalPoints = 0, exactScores = 0, correctOutcomes = 0, correctIntervals = 0, correctHalves = 0, correctQualifiers = 0, correctCorners = 0, correctYellowCards = 0, correctRedCards = 0;
         MEXICO_MATCHES.forEach(match => {
           const pred = player.predictions?.mexico?.[match.id] || {};
           const real = realResults.mexico?.[match.id] || {};
@@ -405,13 +405,22 @@
               }
             }
           }
+          if (pred.corners !== undefined && pred.corners !== '' && real.corners !== undefined && real.corners !== '') {
+            if (parseInt(pred.corners) === parseInt(real.corners)) { totalPoints += 2; correctCorners++; }
+          }
+          if (pred.yellowCards !== undefined && pred.yellowCards !== '' && real.yellowCards !== undefined && real.yellowCards !== '') {
+            if (parseInt(pred.yellowCards) === parseInt(real.yellowCards)) { totalPoints += 1; correctYellowCards++; }
+          }
+          if (pred.redCards !== undefined && pred.redCards !== '' && real.redCards !== undefined && real.redCards !== '') {
+            if (parseInt(pred.redCards) === parseInt(real.redCards)) { totalPoints += 2; correctRedCards++; }
+          }
         });
         Object.keys(GROUPS_CONFIG).forEach(g => {
           const pq = player.predictions?.qualifiers?.[g] || [];
           const rq = realResults.qualifiers?.[g] || [];
           pq.forEach(t => { if (rq.includes(t)) { totalPoints += 2; correctQualifiers++; } });
         });
-        return { totalPoints, exactScores, correctOutcomes, correctIntervals, correctHalves, correctQualifiers };
+        return { totalPoints, exactScores, correctOutcomes, correctIntervals, correctHalves, correctQualifiers, correctCorners, correctYellowCards, correctRedCards };
       };
 
       const leaderboard = useMemo(() => {
@@ -831,6 +840,9 @@
                         { label: 'Marcadores Exactos', value: `${stats.exactScores} ×`, color: 'text-white' },
                         { label: 'Minuto de Gol', value: `${stats.correctIntervals} ×`, color: 'text-white' },
                         { label: 'Clasificados', value: `${stats.correctQualifiers} ×`, color: 'text-white' },
+                        { label: '🚩 Córners', value: `${stats.correctCorners} ×`, color: 'text-white' },
+                        { label: '🟨 T. Amarillas', value: `${stats.correctYellowCards} ×`, color: 'text-white' },
+                        { label: '🟥 T. Rojas', value: `${stats.correctRedCards} ×`, color: 'text-white' },
                       ].map(s => (
                         <div key={s.label} className="bg-emerald-900/10 border border-emerald-500/20 p-3 rounded-xl text-center">
                           <span className="block text-[8px] text-emerald-400 uppercase font-black mb-1">{s.label}</span>
@@ -875,6 +887,20 @@
                               <div className="text-[9px] text-slate-400 flex justify-between bg-slate-950/50 p-1.5 rounded">
                                 <span>⏱️</span>
                                 <span className="font-bold text-slate-300">{pred.interval ? (GOAL_INTERVALS.find(i => i.id === pred.interval)?.label || '-') : 'Sin elegir'}</span>
+                              </div>
+                              <div className="text-[9px] grid grid-cols-3 gap-1">
+                                <div className="bg-slate-950/50 p-1 rounded text-center">
+                                  <span className="block text-slate-500">🚩</span>
+                                  <span className="font-bold text-slate-300">{pred.corners ?? '-'}</span>
+                                </div>
+                                <div className="bg-slate-950/50 p-1 rounded text-center">
+                                  <span className="block text-slate-500">🟨</span>
+                                  <span className="font-bold text-slate-300">{pred.yellowCards ?? '-'}</span>
+                                </div>
+                                <div className="bg-slate-950/50 p-1 rounded text-center">
+                                  <span className="block text-slate-500">🟥</span>
+                                  <span className="font-bold text-slate-300">{pred.redCards ?? '-'}</span>
+                                </div>
                               </div>
                             </div>
                           );
@@ -960,6 +986,31 @@
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+          {/* Corners & Cards */}
+          <div className="bg-slate-950 p-3 rounded-xl space-y-2.5 border border-slate-800/60">
+            <span className="block text-[8px] font-black uppercase text-amber-400">🚩 Córners y Tarjetas (total del partido):</span>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[9px] text-slate-200 font-bold">🚩 Tiros de esquina</span>
+                <span className="block text-[8px] text-emerald-500 font-bold">+2 pts si aciertas</span>
+              </div>
+              <ScoreInput value={pred.corners} onChange={v => onScoreChange('corners', v)} onAdjust={d => onAdjust('corners', d)} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[9px] text-yellow-300 font-bold">🟨 Tarjetas amarillas</span>
+                <span className="block text-[8px] text-emerald-500 font-bold">+1 pt si aciertas</span>
+              </div>
+              <ScoreInput value={pred.yellowCards} onChange={v => onScoreChange('yellowCards', v)} onAdjust={d => onAdjust('yellowCards', d)} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[9px] text-red-400 font-bold">🟥 Tarjetas rojas</span>
+                <span className="block text-[8px] text-emerald-500 font-bold">+2 pts si aciertas</span>
+              </div>
+              <ScoreInput value={pred.redCards} onChange={v => onScoreChange('redCards', v)} onAdjust={d => onAdjust('redCards', d)} />
             </div>
           </div>
         </div>
