@@ -340,6 +340,14 @@
         showToast('Nombre actualizado');
       };
 
+      const handleClearParticipant = async (id, name) => {
+        if (!window.confirm(`¿Borrar el pronóstico de ${name}? Esta acción no se puede deshacer.`)) return;
+        const empty = { mexico: {}, qualifiers: {} };
+        setParticipants(prev => prev.map(p => p.id === id ? { ...p, predictions: empty } : p));
+        await savePredictions(id, empty);
+        showToast(`Pronóstico de ${name} borrado`);
+      };
+
       const handleFillDemo = async () => {
         const rMex = {};
         MEXICO_MATCHES.forEach(m => {
@@ -780,9 +788,14 @@
                           )}
                         </div>
                         {editingPlayerId !== p.id && (
-                          <button onClick={() => { setEditingPlayerId(p.id); setEditingPlayerName(p.name); }} className="text-[9px] bg-slate-900 text-amber-400 border border-slate-700 px-2.5 py-1.5 rounded-lg font-bold hover:bg-slate-800 transition-colors">
-                            ✏️ Editar
-                          </button>
+                          <div className="flex flex-col gap-1.5">
+                            <button onClick={() => { setEditingPlayerId(p.id); setEditingPlayerName(p.name); }} className="text-[9px] bg-slate-900 text-amber-400 border border-slate-700 px-2.5 py-1.5 rounded-lg font-bold hover:bg-slate-800 transition-colors">
+                              ✏️ Editar
+                            </button>
+                            <button onClick={() => handleClearParticipant(p.id, p.name)} className="text-[9px] bg-red-950/50 text-red-400 border border-red-800/40 px-2.5 py-1.5 rounded-lg font-bold hover:bg-red-900/50 transition-colors">
+                              🗑️ Limpiar
+                            </button>
+                          </div>
                         )}
                       </div>
                     ))}
