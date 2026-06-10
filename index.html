@@ -79,9 +79,9 @@
     };
 
     const MEXICO_MATCHES = [
-      { id: 'MEX_M1', date: 'Jun 11, 2026', stadium: 'Estadio Azteca, CDMX 🇲🇽', home: 'MEX', away: 'RSA', title: 'Partido Inaugural' },
-      { id: 'MEX_M2', date: 'Jun 17, 2026', stadium: 'AT&T Stadium, Arlington 🇺🇸', home: 'MEX', away: 'CZE', title: 'Segunda Jornada' },
-      { id: 'MEX_M3', date: 'Jun 23, 2026', stadium: "Levi's Stadium, Santa Clara 🇺🇸", home: 'MEX', away: 'KOR', title: 'Definición de Grupo' }
+      { id: 'MEX_M1', date: 'Jue 11 Jun 2026', time: '8:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'RSA', title: 'Partido Inaugural' },
+      { id: 'MEX_M2', date: 'Mié 17 Jun 2026', time: '5:00 PM CDT', stadium: 'AT&T Stadium · Arlington, Texas', home: 'MEX', away: 'CZE', title: 'Segunda Jornada' },
+      { id: 'MEX_M3', date: 'Mar 23 Jun 2026', time: '3:00 PM PDT', stadium: "Levi's Stadium · Santa Clara, California", home: 'MEX', away: 'KOR', title: 'Definición de Grupo' }
     ];
 
     const GOAL_INTERVALS = [
@@ -924,22 +924,20 @@
         <div className={`bg-slate-900/80 border ${borderClass} rounded-2xl p-4 flex flex-col space-y-4`}>
           <div>
             <span className="text-[8px] bg-emerald-950 text-emerald-400 font-extrabold px-2 py-0.5 rounded border border-emerald-900">{match.title}</span>
-            <p className="text-[10px] text-slate-400 mt-1 font-semibold">{match.date} · {match.stadium}</p>
+            <p className="text-[10px] text-slate-400 mt-1 font-semibold">📍 {match.stadium}</p>
+            <p className="text-[10px] text-amber-400/80 font-bold mt-0.5">🗓 {match.date} · ⏰ {match.time}</p>
           </div>
-          {/* Score row */}
-          <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-emerald-900/40">
-            <div className="flex items-center gap-2.5 w-5/12 justify-start overflow-hidden">
-              <Flag code={match.home} />
-              <span className="text-xs font-black truncate">{TEAMS_DB[match.home].name}</span>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
+          {/* Score rows — equipo en fila propia para que el nombre no se corte */}
+          <div className="bg-slate-950 rounded-xl border border-emerald-900/40 overflow-hidden">
+            <div className="flex items-center gap-3 px-3 py-2.5 border-b border-emerald-900/30">
+              <Flag code={match.home} className="w-8 h-5 shrink-0" />
+              <span className="text-xs font-black text-slate-100 flex-1">{TEAMS_DB[match.home].name}</span>
               <ScoreInput value={pred.home} onChange={v => onScoreChange('home', v)} onAdjust={d => onAdjust('home', d)} />
-              <span className="text-emerald-500 font-black text-xs px-0.5">:</span>
-              <ScoreInput value={pred.away} onChange={v => onScoreChange('away', v)} onAdjust={d => onAdjust('away', d)} />
             </div>
-            <div className="flex items-center gap-2.5 w-5/12 justify-end text-right overflow-hidden">
-              <span className="text-xs font-black truncate">{TEAMS_DB[match.away].name}</span>
-              <Flag code={match.away} />
+            <div className="flex items-center gap-3 px-3 py-2.5">
+              <Flag code={match.away} className="w-8 h-5 shrink-0" />
+              <span className="text-xs font-black text-slate-100 flex-1">{TEAMS_DB[match.away].name}</span>
+              <ScoreInput value={pred.away} onChange={v => onScoreChange('away', v)} onAdjust={d => onAdjust('away', d)} />
             </div>
           </div>
           {/* Interval picker */}
