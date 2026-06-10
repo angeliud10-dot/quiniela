@@ -409,10 +409,10 @@
             if (parseInt(pred.corners) === parseInt(real.corners)) { totalPoints += 2; correctCorners++; }
           }
           if (pred.yellowCards !== undefined && pred.yellowCards !== '' && real.yellowCards !== undefined && real.yellowCards !== '') {
-            if (parseInt(pred.yellowCards) === parseInt(real.yellowCards)) { totalPoints += 1; correctYellowCards++; }
+            if (parseInt(pred.yellowCards) === parseInt(real.yellowCards)) { totalPoints += 2; correctYellowCards++; }
           }
           if (pred.redCards !== undefined && pred.redCards !== '' && real.redCards !== undefined && real.redCards !== '') {
-            if (parseInt(pred.redCards) === parseInt(real.redCards)) { totalPoints += 2; correctRedCards++; }
+            if (parseInt(pred.redCards) === parseInt(real.redCards)) { totalPoints += 1; correctRedCards++; }
           }
         });
         Object.keys(GROUPS_CONFIG).forEach(g => {
@@ -953,10 +953,9 @@
         { icon: '🎯', label: 'Marcador exacto',             pts: '+3', color: 'text-amber-300' },
         { icon: '✅', label: 'Resultado correcto (G/E/P)',   pts: '+1', color: 'text-emerald-300' },
         { icon: '⏱️', label: 'Minuto del 1er gol (exacto)', pts: '+2', color: 'text-amber-300' },
-        { icon: '⏱️', label: 'Mismo tiempo (1T ó 2T)',      pts: '+1', color: 'text-emerald-300' },
         { icon: '🚩', label: 'Tiros de esquina (exacto)',    pts: '+2', color: 'text-amber-300' },
-        { icon: '🟨', label: 'Tarjetas amarillas (exacto)',  pts: '+1', color: 'text-emerald-300' },
-        { icon: '🟥', label: 'Tarjetas rojas (exacto)',      pts: '+2', color: 'text-amber-300' },
+        { icon: '🟨', label: 'Tarjetas amarillas (exacto)',  pts: '+2', color: 'text-amber-300' },
+        { icon: '🟥', label: 'Tarjetas rojas (exacto)',      pts: '+1', color: 'text-emerald-300' },
         { icon: '👑', label: 'Clasificado por grupo (c/u)',  pts: '+2', color: 'text-amber-300' },
       ];
       return (
@@ -1048,14 +1047,14 @@
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[9px] text-yellow-300 font-bold">🟨 Tarjetas amarillas</span>
-                <span className="block text-[8px] text-emerald-500 font-bold">+1 pt si aciertas</span>
+                <span className="block text-[8px] text-emerald-500 font-bold">+2 pts si aciertas</span>
               </div>
               <ScoreInput value={pred.yellowCards} onChange={v => onScoreChange('yellowCards', v)} onAdjust={d => onAdjust('yellowCards', d)} />
             </div>
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[9px] text-red-400 font-bold">🟥 Tarjetas rojas</span>
-                <span className="block text-[8px] text-emerald-500 font-bold">+2 pts si aciertas</span>
+                <span className="block text-[8px] text-emerald-500 font-bold">+1 pt si aciertas</span>
               </div>
               <ScoreInput value={pred.redCards} onChange={v => onScoreChange('redCards', v)} onAdjust={d => onAdjust('redCards', d)} />
             </div>
