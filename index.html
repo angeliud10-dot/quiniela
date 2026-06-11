@@ -161,6 +161,7 @@
       const [showAdminPin, setShowAdminPin] = useState(false);
       const [pendingAdminTab, setPendingAdminTab] = useState(null);
       const [saving, setSaving] = useState(false);
+      const [syncing, setSyncing] = useState({});
       const [now, setNow] = useState(Date.now());
       useEffect(() => {
         const t = setInterval(() => setNow(Date.now()), 1000);
@@ -347,6 +348,54 @@
         if (!window.confirm(`${warn}Al guardar tus clasificados YA NO podrás modificarlos. Esta acción es permanente. ¿Continuar?`)) return;
         await updatePredictions(selectedPlayerId, cur => ({ ...cur, qualifiersLocked: true }));
         showToast('Clasificados guardados y bloqueados. Ya no se pueden editar.', 'success');
+      };
+
+      // ── API SYNC ──────────────────────────────────────────────────────────────
+
+      const STATUS_LABELS = {
+        NS: 'Partido no ha iniciado', PST: 'Partido pospuesto',
+        '1H': 'En juego — 1er tiempo', HT: 'Medio tiempo',
+        '2H': 'En juego — 2do tiempo', ET: 'Tiempo extra',
+        FT: 'Partido finalizado', PEN: 'Finalizado (penales)',
+      };
+
+      const handleSyncMatch = async (match) => {
+        setSyncing(s => ({ ...s, [match.id]: true }));
+        try {
+          const res = await fetch(`/api/sync-results?matchId=${match.id}`);
+          const data = await res.json();
+          if (!res.ok || data.error) {
+            showToast(`Error: ${data.error || 'No se pudo conectar'}`, 'info');
+            return;
+          }
+          if (data.status === 'not_found') {
+            showToast('Fixture no encontrado. ¿Ya comenzó el torneo?', 'info');
+            return;
+          }
+          if (data.status === 'NS' || data.status === 'PST') {
+            showToast(STATUS_LABELS[data.status] || data.status, 'info');
+            return;
+          }
+          // Aplicar todos los campos disponibles al resultado real
+          const cur = realResults.mexico?.[match.id] || {};
+          const next = {
+            ...cur,
+            ...(data.home        !== null && { home:        data.home }),
+            ...(data.away        !== null && { away:        data.away }),
+            ...(data.corners     !== null && { corners:     data.corners }),
+            ...(data.yellowCards !== null && { yellowCards: data.yellowCards }),
+            ...(data.redCards    !== null && { redCards:    data.redCards }),
+            ...(data.firstGoalMinute !== null && { interval: data.firstGoalMinute }),
+          };
+          const nextResults = { ...realResults, mexico: { ...realResults.mexico, [match.id]: next } };
+          setRealResults(nextResults);
+          await saveResults(nextResults);
+          showToast(`✅ ${match.title} sincronizado — ${STATUS_LABELS[data.status] || data.status}`);
+        } catch {
+          showToast('Error de red al sincronizar', 'info');
+        } finally {
+          setSyncing(s => ({ ...s, [match.id]: false }));
+        }
       };
 
       // ── ADMIN ACTIONS ─────────────────────────────────────────────────────────
@@ -740,7 +789,7 @@
                             <div className="flex items-center gap-1.5"><span className="text-base">{p.avatar}</span><span className="font-extrabold text-slate-100 text-xs truncate">{p.name}</span></div>
                             <div className="flex flex-wrap gap-1 mt-1">
                               <span className="text-[8px] bg-emerald-950 px-1.5 rounded text-emerald-300">🎯 {p.exactScores}</span>
-                              <span className="text-[8px] bg-emerald-950 px-1.5 rounded text-emerald-300">⏱️ {p.correctIntervals}</span>
+                              <span className="text-[8px] bg-emerald-950 px-1.5 rounded text-emerald-300">⏱️ {p.minuteWins}</span>
                               <span className="text-[8px] bg-emerald-950 px-1.5 rounded text-emerald-300">👑 {p.correctQualifiers}</span>
                             </div>
                           </div>
@@ -771,7 +820,7 @@
                             <td className="py-3 px-4"><span className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs ${idx === 0 ? 'bg-amber-400 text-emerald-950' : 'bg-slate-800'}`}>{idx + 1}</span></td>
                             <td className="py-3 px-4"><div className="flex items-center gap-2"><span>{p.avatar}</span><span className="font-extrabold text-xs">{p.name}</span></div></td>
                             <td className="py-3 px-4 text-center text-xs text-emerald-200">{p.exactScores}</td>
-                            <td className="py-3 px-4 text-center text-xs text-emerald-200">{p.correctIntervals}</td>
+                            <td className="py-3 px-4 text-center text-xs text-emerald-200">{p.minuteWins}</td>
                             <td className="py-3 px-4 text-center text-xs text-emerald-200">{p.correctQualifiers}</td>
                             <td className="py-3 px-4 text-right font-black text-amber-300">{p.totalPoints} pts</td>
                           </tr>
@@ -793,21 +842,35 @@
 
                 {/* Marcadores reales México */}
                 <div className="space-y-4">
-                  <h3 className="text-xs font-black uppercase text-amber-300">Marcadores Reales — Partidos de México</h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase text-amber-300">Marcadores Reales — Partidos de México</h3>
+                    <span className="text-[9px] text-slate-500 font-medium">Manual o vía API-Football</span>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {MEXICO_MATCHES.map(match => {
                       const real = realResults.mexico?.[match.id] || {};
+                      const isSyncing = syncing[match.id];
                       return (
-                        <MatchCard
-                          key={match.id}
-                          match={match}
-                          pred={real}
-                          isAdmin={true}
-                          onScoreChange={(side, val) => handleScoreChange(match.id, side, val, true)}
-                          onAdjust={(side, d) => adjustScore(match.id, side, d, true)}
-                          onInterval={id => handleIntervalChange(match.id, id, true)}
-                          adminStyle
-                        />
+                        <div key={match.id} className="flex flex-col gap-2">
+                          <button
+                            onClick={() => handleSyncMatch(match)}
+                            disabled={isSyncing}
+                            className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide border transition-colors ${isSyncing ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-emerald-900/30 border-emerald-700/50 text-emerald-300 hover:bg-emerald-800/40'}`}
+                          >
+                            {isSyncing
+                              ? <><span className="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></span> Sincronizando...</>
+                              : <>🔄 Obtener resultado de API</>}
+                          </button>
+                          <MatchCard
+                            match={match}
+                            pred={real}
+                            isAdmin={true}
+                            onScoreChange={(side, val) => handleScoreChange(match.id, side, val, true)}
+                            onAdjust={(side, d) => adjustScore(match.id, side, d, true)}
+                            onInterval={id => handleIntervalChange(match.id, id, true)}
+                            adminStyle
+                          />
+                        </div>
                       );
                     })}
                   </div>

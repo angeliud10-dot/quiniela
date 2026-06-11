@@ -8,5 +8,8 @@
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
     }
-  ]
+  ],
+  "functions": {
+    "api/sync-results.js": { "maxDuration": 10 }
+  }
 }
