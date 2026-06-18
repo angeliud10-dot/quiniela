@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quiniela Mundialista de la Oficina 2026</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
   <style>
     .scrollbar-thin::-webkit-scrollbar { height: 4px; }
     .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
@@ -19,6 +19,35 @@
 </head>
 <body class="bg-slate-950 text-white font-sans antialiased">
   <div id="root"></div>
+
+  <!-- Overlay de errores: si algo falla, lo muestra en pantalla en vez de quedar en negro -->
+  <script>
+    window.__showFatal = function (msg) {
+      var r = document.getElementById('root');
+      if (!r) return;
+      r.innerHTML =
+        '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;font-family:sans-serif">' +
+        '<div style="font-size:40px">⚠️</div>' +
+        '<h2 style="color:#f87171;font-weight:900;font-size:16px">Error al cargar la app</h2>' +
+        '<pre style="color:#cbd5e1;font-size:11px;max-width:90vw;white-space:pre-wrap;word-break:break-word;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px">' +
+        String(msg).replace(/</g, '&lt;') + '</pre>' +
+        '<button onclick="location.reload()" style="background:#10b981;color:#022c22;font-weight:900;padding:10px 24px;border-radius:12px;border:none;font-size:12px;text-transform:uppercase">Reintentar</button>' +
+        '</div>';
+    };
+    window.addEventListener('error', function (e) {
+      window.__showFatal((e.error && e.error.stack) || e.message || 'Error desconocido');
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      window.__showFatal('Promesa rechazada: ' + ((e.reason && e.reason.stack) || e.reason));
+    });
+    // Verificar que las librerías externas cargaron
+    window.addEventListener('load', function () {
+      if (!window.React)     window.__showFatal('No se pudo cargar React desde el CDN. Revisa tu conexión a internet.');
+      else if (!window.ReactDOM) window.__showFatal('No se pudo cargar ReactDOM desde el CDN.');
+      else if (!window.supabase) window.__showFatal('No se pudo cargar Supabase desde el CDN.');
+      else if (!window.Babel) window.__showFatal('No se pudo cargar Babel desde el CDN.');
+    });
+  </script>
 
   <script type="text/babel">
     const { useState, useMemo, useEffect, useCallback } = React;
