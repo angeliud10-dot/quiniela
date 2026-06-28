@@ -108,6 +108,27 @@
 
     // interval se guarda como número de minuto ('1'-'120') o 'NONE' (0-0 sin goles)
 
+    // 16vos de Final (Ronda de 32) — el usuario elige quién avanza a octavos.
+    // Orden por fecha/hora. Cada acierto vale +3 pts (competencia independiente).
+    const ROUND32_MATCHES = [
+      { id: 'R32_W73', home: 'RSA', away: 'CAN', date: '28 Jun', time: '1:00 PM' },
+      { id: 'R32_W76', home: 'BRA', away: 'JPN', date: '29 Jun', time: '11:00 AM' },
+      { id: 'R32_W74', home: 'GER', away: 'PAR', date: '29 Jun', time: '2:30 PM' },
+      { id: 'R32_W75', home: 'NED', away: 'MAR', date: '29 Jun', time: '7:00 PM' },
+      { id: 'R32_W78', home: 'CIV', away: 'NOR', date: '30 Jun', time: '11:00 AM' },
+      { id: 'R32_W77', home: 'FRA', away: 'SWE', date: '30 Jun', time: '3:00 PM' },
+      { id: 'R32_W79', home: 'MEX', away: 'ECU', date: '30 Jun', time: '7:00 PM' },
+      { id: 'R32_W80', home: 'ENG', away: 'COD', date: '01 Jul', time: '10:00 AM' },
+      { id: 'R32_W82', home: 'BEL', away: 'SEN', date: '01 Jul', time: '2:00 PM' },
+      { id: 'R32_W81', home: 'USA', away: 'BIH', date: '01 Jul', time: '6:00 PM' },
+      { id: 'R32_W84', home: 'ESP', away: 'AUT', date: '02 Jul', time: '1:00 PM' },
+      { id: 'R32_W83', home: 'POR', away: 'CRO', date: '02 Jul', time: '5:00 PM' },
+      { id: 'R32_W85', home: 'SUI', away: 'ALG', date: '02 Jul', time: '9:00 PM' },
+      { id: 'R32_W88', home: 'AUS', away: 'EGY', date: '03 Jul', time: '12:00 PM' },
+      { id: 'R32_W86', home: 'ARG', away: 'CPV', date: '03 Jul', time: '4:00 PM' },
+      { id: 'R32_W87', home: 'COL', away: 'GHA', date: '03 Jul', time: '7:30 PM' },
+    ];
+
     // ── FLAG IMAGE ───────────────────────────────────────────────────────────────
 
     function Flag({ code, className = 'w-8 h-5' }) {
@@ -370,6 +391,33 @@
         showToast('Clasificados guardados y bloqueados. Ya no se pueden editar.', 'success');
       };
 
+      // ── 16VOS DE FINAL (RONDA DE 32) ───────────────────────────────────────────
+
+      const toggleRound32Winner = async (matchId, teamCode, isAdmin = false) => {
+        if (isAdmin) {
+          const cur = realResults.round32?.[matchId];
+          const next = { ...realResults, round32: { ...(realResults.round32 || {}), [matchId]: cur === teamCode ? undefined : teamCode } };
+          setRealResults(next);
+          await saveResults(next);
+        } else {
+          if (selectedPlayer?.predictions?.round32Locked) { showToast('Tus 16vos ya están guardados y bloqueados.', 'info'); return; }
+          await updatePredictions(selectedPlayerId, cur => {
+            const prev = cur.round32?.[matchId];
+            return { ...cur, round32: { ...(cur.round32 || {}), [matchId]: prev === teamCode ? undefined : teamCode } };
+          });
+        }
+      };
+
+      const handleLockRound32 = async () => {
+        const totalSelected = ROUND32_MATCHES.filter(m => selectedPlayer?.predictions?.round32?.[m.id]).length;
+        const warn = totalSelected < ROUND32_MATCHES.length
+          ? `Aún te faltan cruces por elegir (${totalSelected}/${ROUND32_MATCHES.length}). `
+          : '';
+        if (!window.confirm(`${warn}Al guardar tus 16vos YA NO podrás modificarlos. Esta acción es permanente. ¿Continuar?`)) return;
+        await updatePredictions(selectedPlayerId, cur => ({ ...cur, round32Locked: true }));
+        showToast('16vos guardados y bloqueados. Ya no se pueden editar.', 'success');
+      };
+
       // ── API SYNC ──────────────────────────────────────────────────────────────
 
       const STATUS_LABELS = {
@@ -448,14 +496,17 @@
           const s = [...GROUPS_CONFIG[g]].sort(() => 0.5 - Math.random());
           rQuals[g] = [s[0], s[1]];
         });
-        const nextReal = { mexico: rMex, qualifiers: rQuals };
+        const rR32 = {};
+        ROUND32_MATCHES.forEach(m => { rR32[m.id] = Math.random() < 0.5 ? m.home : m.away; });
+        const nextReal = { mexico: rMex, qualifiers: rQuals, round32: rR32 };
         setRealResults(nextReal);
         await saveResults(nextReal);
         for (const p of participants) {
-          const mex = {}, quals = {};
+          const mex = {}, quals = {}, r32 = {};
           MEXICO_MATCHES.forEach(m => { mex[m.id] = { home: String(Math.floor(Math.random() * 3) + 1), away: String(Math.floor(Math.random() * 2)), interval: String(Math.floor(Math.random() * 90) + 1) }; });
           Object.keys(GROUPS_CONFIG).forEach(g => { const s = [...GROUPS_CONFIG[g]].sort(() => 0.5 - Math.random()); quals[g] = [s[0], s[1]]; });
-          const pred = { mexico: mex, qualifiers: quals };
+          ROUND32_MATCHES.forEach(m => { r32[m.id] = Math.random() < 0.5 ? m.home : m.away; });
+          const pred = { mexico: mex, qualifiers: quals, round32: r32 };
           setParticipants(prev => prev.map(q => q.id === p.id ? { ...q, predictions: pred } : q));
           await savePredictions(p.id, pred);
         }
@@ -476,7 +527,7 @@
 
       // Puntos base por jugador (sin bonus de minuto)
       const calculatePoints = (player) => {
-        let totalPoints = 0, exactScores = 0, correctOutcomes = 0, correctQualifiers = 0, correctCorners = 0, correctYellowCards = 0, correctRedCards = 0;
+        let totalPoints = 0, exactScores = 0, correctOutcomes = 0, correctQualifiers = 0, correctCorners = 0, correctYellowCards = 0, correctRedCards = 0, correctRound32 = 0;
         MEXICO_MATCHES.forEach(match => {
           const pred = player.predictions?.mexico?.[match.id] || {};
           const real = realResults.mexico?.[match.id] || {};
@@ -502,7 +553,12 @@
           const rq = realResults.qualifiers?.[g] || [];
           pq.forEach(t => { if (rq.includes(t)) { totalPoints += 2; correctQualifiers++; } });
         });
-        return { totalPoints, exactScores, correctOutcomes, correctQualifiers, correctCorners, correctYellowCards, correctRedCards };
+        ROUND32_MATCHES.forEach(match => {
+          const pick = player.predictions?.round32?.[match.id];
+          const real = realResults.round32?.[match.id];
+          if (pick && real && pick === real) { totalPoints += 3; correctRound32++; }
+        });
+        return { totalPoints, exactScores, correctOutcomes, correctQualifiers, correctCorners, correctYellowCards, correctRedCards, correctRound32 };
       };
 
       // Bonus de minuto: por cada partido, el/los jugadores más cercanos al minuto real del 1er gol reciben +2 pts
@@ -791,6 +847,56 @@
                 </div>
                   );
                 })()}
+
+                {/* 16vos de Final — elegir quién avanza a octavos */}
+                {(() => {
+                  const round32Locked = !!selectedPlayer?.predictions?.round32Locked;
+                  const picks = selectedPlayer?.predictions?.round32 || {};
+                  const totalPicked = ROUND32_MATCHES.filter(m => picks[m.id]).length;
+                  return (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-emerald-800/40 pb-2 gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🏟️</span>
+                      <h2 className="text-sm font-black uppercase text-amber-300 tracking-wider">16vos de Final — ¿Quién avanza a Octavos?</h2>
+                    </div>
+                    <span className="text-[9px] bg-slate-900 border border-amber-400/30 text-amber-300 font-bold px-2.5 py-1 rounded-full whitespace-nowrap">{totalPicked}/{ROUND32_MATCHES.length} · +3 c/u</span>
+                  </div>
+                  {round32Locked ? (
+                    <div className="flex items-center gap-3 bg-red-950/60 border border-red-500/50 rounded-2xl px-4 py-3">
+                      <span className="text-xl shrink-0">🔒</span>
+                      <div>
+                        <p className="text-xs font-black text-red-300 uppercase tracking-wide">16vos bloqueados</p>
+                        <p className="text-[10px] text-red-400/80 font-medium mt-0.5">Ya guardaste tus 16vos. No se pueden modificar.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 bg-amber-950/30 border border-amber-500/30 rounded-2xl px-4 py-3">
+                      <p className="text-[10px] text-amber-200/90 font-medium leading-relaxed flex-1">
+                        Toca al equipo que crees que avanza en cada cruce. Cuando termines, guárdalos. <span className="font-black">Una vez guardados ya no podrás cambiarlos.</span>
+                      </p>
+                      <button
+                        onClick={handleLockRound32}
+                        className="shrink-0 bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black px-4 py-2.5 rounded-xl text-xs uppercase tracking-wide transition-colors shadow-lg"
+                      >
+                        💾 Guardar
+                      </button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {ROUND32_MATCHES.map(match => (
+                      <Round32Card
+                        key={match.id}
+                        match={match}
+                        pick={picks[match.id]}
+                        locked={round32Locked}
+                        onPick={code => toggleRound32Winner(match.id, code)}
+                      />
+                    ))}
+                  </div>
+                </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -852,6 +958,9 @@
 
                 {/* Ranking exclusivo: competencia de clasificados por grupo */}
                 <QualifiersRanking leaderboard={leaderboard} realResults={realResults} onInspect={setInspectedPlayerId} />
+
+                {/* Ranking exclusivo: competencia de 16vos de final */}
+                <Round32Ranking leaderboard={leaderboard} realResults={realResults} onInspect={setInspectedPlayerId} />
               </div>
             )}
 
@@ -916,6 +1025,25 @@
                     onToggle={code => toggleQualifier(selectedGroup, code, true)}
                     adminStyle
                   />
+                </div>
+
+                {/* Ganadores reales de 16vos */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase text-amber-300">Ganadores Reales — 16vos de Final</h3>
+                    <span className="text-[9px] text-slate-500 font-medium">Marca quién avanzó a octavos</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {ROUND32_MATCHES.map(match => (
+                      <Round32Card
+                        key={match.id}
+                        match={match}
+                        pick={realResults.round32?.[match.id]}
+                        onPick={code => toggleRound32Winner(match.id, code, true)}
+                        adminStyle
+                      />
+                    ))}
+                  </div>
                 </div>
 
                 {/* Acciones de administrador */}
@@ -1008,6 +1136,7 @@
                         { label: 'Marcadores Exactos', value: `${fullStats.exactScores} ×`, color: 'text-white' },
                         { label: '⏱️ Minuto más cercano', value: `${fullStats.minuteWins} ×`, color: 'text-white' },
                         { label: 'Clasificados', value: `${fullStats.correctQualifiers} ×`, color: 'text-white' },
+                        { label: '🏟️ 16vos acertados', value: `${fullStats.correctRound32} ×`, color: 'text-white' },
                         { label: '🚩 Córners', value: `${fullStats.correctCorners} ×`, color: 'text-white' },
                         { label: '🟨 T. Amarillas', value: `${fullStats.correctYellowCards} ×`, color: 'text-white' },
                         { label: '🟥 T. Rojas', value: `${fullStats.correctRedCards} ×`, color: 'text-white' },
@@ -1119,6 +1248,35 @@
                         })}
                       </div>
                     </div>
+                    {/* Round of 32 detail */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-black text-amber-300 uppercase tracking-wider border-b border-emerald-900/60 pb-1.5">🏟️ 16vos de Final</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {ROUND32_MATCHES.map(match => {
+                          const pick = player.predictions?.round32?.[match.id];
+                          const real = realResults.round32?.[match.id];
+                          const hit = pick && real && pick === real;
+                          const miss = pick && real && pick !== real;
+                          return (
+                            <div key={match.id} className={`rounded-xl p-2 space-y-1 border ${hit ? 'bg-emerald-500/15 border-emerald-500/30' : miss ? 'bg-red-950/30 border-red-800/40' : 'bg-slate-900/60 border-emerald-900/20'}`}>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[7px] text-slate-500 font-bold">{match.date}</span>
+                                {hit && <span className="text-[7px] bg-emerald-500 text-emerald-950 px-1 rounded font-black">+3</span>}
+                                {miss && <span className="text-[7px] text-red-400">✕</span>}
+                              </div>
+                              <div className="text-[8px] text-slate-500 truncate">{TEAMS_DB[match.home].name} vs {TEAMS_DB[match.away].name}</div>
+                              {pick ? (
+                                <div className={`flex items-center gap-1 text-[9px] font-bold ${hit ? 'text-emerald-300' : miss ? 'text-red-300' : 'text-slate-300'}`}>
+                                  <Flag code={pick} className="w-4 h-2.5" />
+                                  <span className="truncate">{TEAMS_DB[pick].name}</span>
+                                  {hit && <span className="ml-auto">✓</span>}
+                                </div>
+                              ) : <span className="text-[9px] text-slate-500 italic block">Sin elegir</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1141,6 +1299,7 @@
         { icon: '🟨', label: 'Tarjetas amarillas (exacto)',  pts: '+2', color: 'text-amber-300' },
         { icon: '🟥', label: 'Tarjetas rojas (exacto)',      pts: '+1', color: 'text-emerald-300' },
         { icon: '👑', label: 'Clasificado por grupo (c/u)',  pts: '+2', color: 'text-amber-300' },
+        { icon: '🏟️', label: '16vos: equipo que avanza (c/u)', pts: '+3', color: 'text-amber-300' },
       ];
       return (
         <div className="bg-slate-900/60 border border-emerald-900/40 rounded-2xl overflow-hidden">
@@ -1318,6 +1477,111 @@
               );
             })}
           </div>
+        </div>
+      );
+    }
+
+    // ── ROUND OF 32 CARD ────────────────────────────────────────────────────────────
+    // Cruce de 16vos: se toca al equipo que avanza. Vale para usuario y para admin.
+
+    function Round32Card({ match, pick, locked, onPick, adminStyle }) {
+      const TeamRow = ({ code }) => {
+        const selected = pick === code;
+        const activeCls = adminStyle ? 'bg-amber-500/15 border-amber-400' : 'bg-emerald-500/15 border-emerald-400';
+        return (
+          <button
+            onClick={() => !locked && onPick(code)}
+            disabled={locked}
+            className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border transition-all w-full ${locked ? 'cursor-not-allowed' : 'hover:bg-emerald-900/10'} ${selected ? `${activeCls} shadow-md` : 'bg-slate-950/60 border-slate-800/60'}`}
+          >
+            <Flag code={code} className="w-7 h-5 shrink-0" />
+            <span className={`text-[11px] font-extrabold truncate flex-1 text-left ${selected ? 'text-amber-300' : 'text-slate-200'}`}>{TEAMS_DB[code]?.name || code}</span>
+            {selected
+              ? <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full shrink-0 ${adminStyle ? 'bg-amber-500 text-slate-950' : 'bg-emerald-500 text-emerald-950'}`}>✓ Avanza</span>
+              : <span className="w-4 h-4 rounded-full border border-slate-600 shrink-0"></span>}
+          </button>
+        );
+      };
+      return (
+        <div className={`bg-slate-900/80 border rounded-2xl p-3 space-y-2 ${locked ? 'border-red-900/40' : adminStyle ? 'border-amber-500/30' : 'border-emerald-800/30'}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[8px] bg-emerald-950 text-emerald-400 font-extrabold px-2 py-0.5 rounded border border-emerald-900">16vos</span>
+            <span className="text-[9px] text-amber-400/80 font-bold">🗓 {match.date} · {match.time}</span>
+          </div>
+          <div className="space-y-1.5">
+            <TeamRow code={match.home} />
+            <TeamRow code={match.away} />
+          </div>
+        </div>
+      );
+    }
+
+    // ── ROUND OF 32 RANKING ─────────────────────────────────────────────────────────
+    // Ranking exclusivo de la competencia de 16vos (cada acierto +3)
+
+    function Round32Ranking({ leaderboard, realResults, onInspect }) {
+      const totalReal = ROUND32_MATCHES.filter(m => realResults.round32?.[m.id]).length;
+      const ranking = [...leaderboard]
+        .map(p => ({ ...p, rPoints: p.correctRound32 * 3 }))
+        .sort((a, b) => b.correctRound32 !== a.correctRound32
+          ? b.correctRound32 - a.correctRound32
+          : a.name.localeCompare(b.name));
+      const medals = ['🥇', '🥈', '🥉'];
+      const leaderCount = ranking[0]?.correctRound32 || 0;
+
+      return (
+        <div className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl overflow-hidden shadow-2xl">
+          <div className="bg-gradient-to-r from-emerald-950/40 to-slate-900 px-4 py-4 border-b border-emerald-500/20">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🏟️</span>
+                <div>
+                  <h3 className="text-sm font-black uppercase text-emerald-300 tracking-wide">Competencia de 16vos</h3>
+                  <p className="text-[10px] text-emerald-300/80 font-medium">¿Quién acertó más equipos que avanzan a octavos? · +3 por acierto</p>
+                </div>
+              </div>
+              {totalReal > 0 && (
+                <span className="text-[9px] bg-slate-950 border border-emerald-400/30 text-emerald-300 font-bold px-2.5 py-1 rounded-full whitespace-nowrap">
+                  {totalReal} definidos
+                </span>
+              )}
+            </div>
+          </div>
+
+          {totalReal === 0 ? (
+            <div className="p-6 text-center">
+              <p className="text-xs text-slate-400">Aún no se han cargado los ganadores de 16vos. El ranking aparecerá en cuanto el organizador los registre.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-emerald-900/20">
+              {ranking.map((p, idx) => {
+                const pct = totalReal > 0 ? Math.round((p.correctRound32 / totalReal) * 100) : 0;
+                const isLeader = p.correctRound32 > 0 && p.correctRound32 === leaderCount;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => onInspect(p.id)}
+                    className={`px-4 py-3 flex items-center gap-3 cursor-pointer transition-colors hover:bg-emerald-900/10 ${isLeader ? 'bg-emerald-500/5' : ''}`}
+                  >
+                    <span className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] shrink-0 ${idx === 0 ? 'bg-amber-400 text-emerald-950' : idx === 1 ? 'bg-slate-400 text-slate-950' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-800 text-slate-300'}`}>
+                      {idx < 3 ? medals[idx] : idx + 1}
+                    </span>
+                    <span className="text-lg shrink-0">{p.avatar}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-extrabold text-slate-100 truncate">{p.name}</p>
+                      <div className="mt-1 h-1.5 bg-slate-950 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${idx === 0 ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: pct + '%' }}></div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="block text-sm font-black text-emerald-300">{p.correctRound32}<span className="text-[10px] text-slate-500 font-bold">/{totalReal}</span></span>
+                      <span className="text-[8px] text-emerald-400 font-bold uppercase">{p.rPoints} pts</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       );
     }
