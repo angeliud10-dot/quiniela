@@ -757,6 +757,63 @@
                   </div>
                 </div>
 
+                {/* 16vos de Final — elegir quién avanza a octavos (competencia activa actual) */}
+                {(() => {
+                  const round32Locked = !!selectedPlayer?.predictions?.round32Locked;
+                  const picks = selectedPlayer?.predictions?.round32 || {};
+                  const totalPicked = ROUND32_MATCHES.filter(m => picks[m.id]).length;
+                  return (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-emerald-800/40 pb-2 gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🏟️</span>
+                      <h2 className="text-sm font-black uppercase text-amber-300 tracking-wider">16vos de Final — ¿Quién avanza a Octavos?</h2>
+                    </div>
+                    <span className="text-[9px] bg-slate-900 border border-amber-400/30 text-amber-300 font-bold px-2.5 py-1 rounded-full whitespace-nowrap">{totalPicked}/{ROUND32_MATCHES.length} · +3 c/u</span>
+                  </div>
+                  {round32Locked ? (
+                    <div className="flex items-center gap-3 bg-red-950/60 border border-red-500/50 rounded-2xl px-4 py-3">
+                      <span className="text-xl shrink-0">🔒</span>
+                      <div>
+                        <p className="text-xs font-black text-red-300 uppercase tracking-wide">16vos bloqueados</p>
+                        <p className="text-[10px] text-red-400/80 font-medium mt-0.5">Ya guardaste tus 16vos. No se pueden modificar.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 bg-amber-950/30 border border-amber-500/30 rounded-2xl px-4 py-3">
+                      <p className="text-[10px] text-amber-200/90 font-medium leading-relaxed flex-1">
+                        Toca al equipo que crees que avanza en cada cruce. Cuando termines, guárdalos. <span className="font-black">Una vez guardados ya no podrás cambiarlos.</span>
+                      </p>
+                      <button
+                        onClick={handleLockRound32}
+                        className="shrink-0 bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black px-4 py-2.5 rounded-xl text-xs uppercase tracking-wide transition-colors shadow-lg"
+                      >
+                        💾 Guardar
+                      </button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {ROUND32_MATCHES.map(match => (
+                      <Round32Card
+                        key={match.id}
+                        match={match}
+                        pick={picks[match.id]}
+                        locked={round32Locked}
+                        onPick={code => toggleRound32Winner(match.id, code)}
+                      />
+                    ))}
+                  </div>
+                </div>
+                  );
+                })()}
+
+                {/* ── Predicciones anteriores (fase de grupos) ─────────────────── */}
+                <div className="flex items-center gap-2 pt-2">
+                  <span className="text-base">📜</span>
+                  <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">Predicciones anteriores — Fase de Grupos</h2>
+                  <div className="flex-1 h-px bg-slate-800"></div>
+                </div>
+
                 {/* Banner informativo de cierres por partido */}
                 <div className="flex items-start gap-3 bg-emerald-950/60 border border-emerald-700/50 rounded-2xl px-4 py-3">
                   <span className="text-xl shrink-0">⏳</span>
@@ -844,56 +901,6 @@
                     onToggle={code => toggleQualifier(selectedGroup, code)}
                     locked={qualifiersLocked}
                   />
-                </div>
-                  );
-                })()}
-
-                {/* 16vos de Final — elegir quién avanza a octavos */}
-                {(() => {
-                  const round32Locked = !!selectedPlayer?.predictions?.round32Locked;
-                  const picks = selectedPlayer?.predictions?.round32 || {};
-                  const totalPicked = ROUND32_MATCHES.filter(m => picks[m.id]).length;
-                  return (
-                <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-emerald-800/40 pb-2 gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">🏟️</span>
-                      <h2 className="text-sm font-black uppercase text-amber-300 tracking-wider">16vos de Final — ¿Quién avanza a Octavos?</h2>
-                    </div>
-                    <span className="text-[9px] bg-slate-900 border border-amber-400/30 text-amber-300 font-bold px-2.5 py-1 rounded-full whitespace-nowrap">{totalPicked}/{ROUND32_MATCHES.length} · +3 c/u</span>
-                  </div>
-                  {round32Locked ? (
-                    <div className="flex items-center gap-3 bg-red-950/60 border border-red-500/50 rounded-2xl px-4 py-3">
-                      <span className="text-xl shrink-0">🔒</span>
-                      <div>
-                        <p className="text-xs font-black text-red-300 uppercase tracking-wide">16vos bloqueados</p>
-                        <p className="text-[10px] text-red-400/80 font-medium mt-0.5">Ya guardaste tus 16vos. No se pueden modificar.</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between gap-3 bg-amber-950/30 border border-amber-500/30 rounded-2xl px-4 py-3">
-                      <p className="text-[10px] text-amber-200/90 font-medium leading-relaxed flex-1">
-                        Toca al equipo que crees que avanza en cada cruce. Cuando termines, guárdalos. <span className="font-black">Una vez guardados ya no podrás cambiarlos.</span>
-                      </p>
-                      <button
-                        onClick={handleLockRound32}
-                        className="shrink-0 bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black px-4 py-2.5 rounded-xl text-xs uppercase tracking-wide transition-colors shadow-lg"
-                      >
-                        💾 Guardar
-                      </button>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {ROUND32_MATCHES.map(match => (
-                      <Round32Card
-                        key={match.id}
-                        match={match}
-                        pick={picks[match.id]}
-                        locked={round32Locked}
-                        onPick={code => toggleRound32Winner(match.id, code)}
-                      />
-                    ))}
-                  </div>
                 </div>
                   );
                 })()}
