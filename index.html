@@ -110,6 +110,9 @@
 
     // 16vos de Final (Ronda de 32) — el usuario elige quién avanza a octavos.
     // Orden por fecha/hora. Cada acierto vale +3 pts (competencia independiente).
+    // Cierre para todos: 12:00 PM (mediodía) hora de México (UTC-6) del 28 Jun, día en que arranca la ronda.
+    const ROUND32_DEADLINE = '2026-06-28T12:00:00-06:00';
+    const ROUND32_DEADLINE_LABEL = '28 Jun · 12:00 PM';
     const ROUND32_MATCHES = [
       { id: 'R32_W73', home: 'RSA', away: 'CAN', date: '28 Jun', time: '1:00 PM' },
       { id: 'R32_W76', home: 'BRA', away: 'JPN', date: '29 Jun', time: '11:00 AM' },
@@ -401,6 +404,7 @@
           await saveResults(next);
         } else {
           if (selectedPlayer?.predictions?.round32Locked) { showToast('Tus 16vos ya están guardados y bloqueados.', 'info'); return; }
+          if (now >= new Date(ROUND32_DEADLINE).getTime()) { showToast(`Los 16vos cerraron el ${ROUND32_DEADLINE_LABEL}. Ya no se aceptan cambios.`, 'info'); return; }
           await updatePredictions(selectedPlayerId, cur => {
             const prev = cur.round32?.[matchId];
             return { ...cur, round32: { ...(cur.round32 || {}), [matchId]: prev === teamCode ? undefined : teamCode } };
@@ -409,6 +413,7 @@
       };
 
       const handleLockRound32 = async () => {
+        if (now >= new Date(ROUND32_DEADLINE).getTime()) { showToast(`Los 16vos ya cerraron (${ROUND32_DEADLINE_LABEL}).`, 'info'); return; }
         const totalSelected = ROUND32_MATCHES.filter(m => selectedPlayer?.predictions?.round32?.[m.id]).length;
         const warn = totalSelected < ROUND32_MATCHES.length
           ? `Aún te faltan cruces por elegir (${totalSelected}/${ROUND32_MATCHES.length}). `
@@ -760,8 +765,18 @@
                 {/* 16vos de Final — elegir quién avanza a octavos (competencia activa actual) */}
                 {(() => {
                   const round32Locked = !!selectedPlayer?.predictions?.round32Locked;
+                  const deadlineMs = new Date(ROUND32_DEADLINE).getTime();
+                  const timeClosed = now >= deadlineMs;
+                  const disabled = round32Locked || timeClosed;
                   const picks = selectedPlayer?.predictions?.round32 || {};
                   const totalPicked = ROUND32_MATCHES.filter(m => picks[m.id]).length;
+                  // Cuenta regresiva
+                  const diff = Math.max(0, deadlineMs - now);
+                  const d = Math.floor(diff / 86400000);
+                  const h = Math.floor((diff % 86400000) / 3600000);
+                  const mnt = Math.floor((diff % 3600000) / 60000);
+                  const sec = Math.floor((diff % 60000) / 1000);
+                  const countdown = d > 0 ? `${d}d ${h}h ${mnt}m` : `${h}h ${mnt}m ${sec}s`;
                   return (
                 <div className="space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-emerald-800/40 pb-2 gap-2">
@@ -771,7 +786,15 @@
                     </div>
                     <span className="text-[9px] bg-slate-900 border border-amber-400/30 text-amber-300 font-bold px-2.5 py-1 rounded-full whitespace-nowrap">{totalPicked}/{ROUND32_MATCHES.length} · +3 c/u</span>
                   </div>
-                  {round32Locked ? (
+                  {timeClosed ? (
+                    <div className="flex items-center gap-3 bg-red-950/60 border border-red-500/50 rounded-2xl px-4 py-3">
+                      <span className="text-xl shrink-0">🔒</span>
+                      <div>
+                        <p className="text-xs font-black text-red-300 uppercase tracking-wide">16vos cerrados</p>
+                        <p className="text-[10px] text-red-400/80 font-medium mt-0.5">El plazo terminó el {ROUND32_DEADLINE_LABEL} (hora de México). Ya no se aceptan cambios.</p>
+                      </div>
+                    </div>
+                  ) : round32Locked ? (
                     <div className="flex items-center gap-3 bg-red-950/60 border border-red-500/50 rounded-2xl px-4 py-3">
                       <span className="text-xl shrink-0">🔒</span>
                       <div>
@@ -780,16 +803,27 @@
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between gap-3 bg-amber-950/30 border border-amber-500/30 rounded-2xl px-4 py-3">
-                      <p className="text-[10px] text-amber-200/90 font-medium leading-relaxed flex-1">
-                        Toca al equipo que crees que avanza en cada cruce. Cuando termines, guárdalos. <span className="font-black">Una vez guardados ya no podrás cambiarlos.</span>
-                      </p>
-                      <button
-                        onClick={handleLockRound32}
-                        className="shrink-0 bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black px-4 py-2.5 rounded-xl text-xs uppercase tracking-wide transition-colors shadow-lg"
-                      >
-                        💾 Guardar
-                      </button>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3 bg-emerald-950/60 border border-emerald-700/50 rounded-2xl px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl shrink-0">⏳</span>
+                          <div>
+                            <p className="text-[10px] font-black uppercase text-emerald-400 tracking-wide">Cierra para todos · {ROUND32_DEADLINE_LABEL}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Tiempo restante: <span className="text-amber-300 font-black">{countdown}</span></p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 bg-amber-950/30 border border-amber-500/30 rounded-2xl px-4 py-3">
+                        <p className="text-[10px] text-amber-200/90 font-medium leading-relaxed flex-1">
+                          Toca al equipo que crees que avanza en cada cruce. Si quieres cerrarlos antes del plazo, guárdalos. <span className="font-black">Una vez guardados ya no podrás cambiarlos.</span>
+                        </p>
+                        <button
+                          onClick={handleLockRound32}
+                          className="shrink-0 bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black px-4 py-2.5 rounded-xl text-xs uppercase tracking-wide transition-colors shadow-lg"
+                        >
+                          💾 Guardar
+                        </button>
+                      </div>
                     </div>
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -798,7 +832,7 @@
                         key={match.id}
                         match={match}
                         pick={picks[match.id]}
-                        locked={round32Locked}
+                        locked={disabled}
                         onPick={code => toggleRound32Winner(match.id, code)}
                       />
                     ))}
