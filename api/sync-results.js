@@ -8,6 +8,7 @@ const MATCH_DATES = {
   MEX_M1: '2026-06-11',
   MEX_M2: '2026-06-18',
   MEX_M3: '2026-06-24',
+  MEX_M4: '2026-06-30', // 16vos de Final — México vs Ecuador
 };
 
 const STAT = {

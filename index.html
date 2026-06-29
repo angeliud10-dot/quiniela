@@ -99,11 +99,12 @@
     };
 
     // Deadlines en hora de México (UTC-6, sin horario de verano).
-    // M1: 12:00 PM del día inaugural. M2 y M3: una hora antes del silbatazo.
+    // M1: 12:00 PM del día inaugural. M2/M3/M4: una hora antes del silbatazo.
     const MEXICO_MATCHES = [
-      { id: 'MEX_M1', date: 'Jue 11 Jun 2026', time: '2:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'RSA', title: 'Partido Inaugural', deadline: '2026-06-11T12:00:00-06:00', deadlineLabel: '11 Jun · 12:00 PM' },
-      { id: 'MEX_M2', date: 'Jue 18 Jun 2026', time: '8:00 PM CDT', stadium: 'Estadio Akron · Guadalajara', home: 'MEX', away: 'KOR', title: 'Segunda Jornada', deadline: '2026-06-18T19:00:00-06:00', deadlineLabel: '18 Jun · 7:00 PM' },
-      { id: 'MEX_M3', date: 'Mié 24 Jun 2026', time: '8:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'CZE', title: 'Definición de Grupo', deadline: '2026-06-24T19:00:00-06:00', deadlineLabel: '24 Jun · 7:00 PM' }
+      { id: 'MEX_M1', stage: 'group', date: 'Jue 11 Jun 2026', time: '2:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'RSA', title: 'Partido Inaugural', deadline: '2026-06-11T12:00:00-06:00', deadlineLabel: '11 Jun · 12:00 PM' },
+      { id: 'MEX_M2', stage: 'group', date: 'Jue 18 Jun 2026', time: '8:00 PM CDT', stadium: 'Estadio Akron · Guadalajara', home: 'MEX', away: 'KOR', title: 'Segunda Jornada', deadline: '2026-06-18T19:00:00-06:00', deadlineLabel: '18 Jun · 7:00 PM' },
+      { id: 'MEX_M3', stage: 'group', date: 'Mié 24 Jun 2026', time: '8:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'CZE', title: 'Definición de Grupo', deadline: '2026-06-24T19:00:00-06:00', deadlineLabel: '24 Jun · 7:00 PM' },
+      { id: 'MEX_M4', stage: 'knockout', date: 'Mar 30 Jun 2026', time: '7:00 PM CDT', stadium: 'Estadio Azteca · Ciudad de México', home: 'MEX', away: 'ECU', title: '16vos de Final', deadline: '2026-06-30T18:00:00-06:00', deadlineLabel: '30 Jun · 6:00 PM' }
     ];
 
     // interval se guarda como número de minuto ('1'-'120') o 'NONE' (0-0 sin goles)
@@ -841,6 +842,31 @@
                   );
                 })()}
 
+                {/* Partido de México en 16vos — predicción completa (marcador, minuto, córners, tarjetas) */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 border-b border-emerald-800/40 pb-2">
+                    <span className="text-lg">🇲🇽</span>
+                    <h2 className="text-sm font-black uppercase text-amber-300 tracking-wider">México en 16vos — Predicción completa</h2>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {MEXICO_MATCHES.filter(m => m.stage === 'knockout').map(match => {
+                      const pred = selectedPlayer?.predictions?.mexico?.[match.id] || {};
+                      return (
+                        <MatchCard
+                          key={match.id}
+                          match={match}
+                          pred={pred}
+                          isAdmin={false}
+                          locked={isMatchLocked(match)}
+                          onScoreChange={(side, val) => handleScoreChange(match.id, side, val)}
+                          onAdjust={(side, d) => adjustScore(match.id, side, d)}
+                          onInterval={id => handleIntervalChange(match.id, id)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* ── Predicciones anteriores (fase de grupos) ─────────────────── */}
                 <div className="flex items-center gap-2 pt-2">
                   <span className="text-base">📜</span>
@@ -871,7 +897,7 @@
                     </h2>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {MEXICO_MATCHES.map(match => {
+                    {MEXICO_MATCHES.filter(m => m.stage !== 'knockout').map(match => {
                       const pred = selectedPlayer?.predictions?.mexico?.[match.id] || {};
                       return (
                         <MatchCard
