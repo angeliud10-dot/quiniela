@@ -763,6 +763,31 @@
                   </div>
                 </div>
 
+                {/* Partido de México en 16vos — predicción completa (marcador, minuto, córners, tarjetas) */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 border-b border-emerald-800/40 pb-2">
+                    <span className="text-lg">🇲🇽</span>
+                    <h2 className="text-sm font-black uppercase text-amber-300 tracking-wider">México en 16vos — Predicción completa</h2>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {MEXICO_MATCHES.filter(m => m.stage === 'knockout').map(match => {
+                      const pred = selectedPlayer?.predictions?.mexico?.[match.id] || {};
+                      return (
+                        <MatchCard
+                          key={match.id}
+                          match={match}
+                          pred={pred}
+                          isAdmin={false}
+                          locked={isMatchLocked(match)}
+                          onScoreChange={(side, val) => handleScoreChange(match.id, side, val)}
+                          onAdjust={(side, d) => adjustScore(match.id, side, d)}
+                          onInterval={id => handleIntervalChange(match.id, id)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* 16vos de Final — elegir quién avanza a octavos (competencia activa actual) */}
                 {(() => {
                   const round32Locked = !!selectedPlayer?.predictions?.round32Locked;
@@ -841,31 +866,6 @@
                 </div>
                   );
                 })()}
-
-                {/* Partido de México en 16vos — predicción completa (marcador, minuto, córners, tarjetas) */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 border-b border-emerald-800/40 pb-2">
-                    <span className="text-lg">🇲🇽</span>
-                    <h2 className="text-sm font-black uppercase text-amber-300 tracking-wider">México en 16vos — Predicción completa</h2>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {MEXICO_MATCHES.filter(m => m.stage === 'knockout').map(match => {
-                      const pred = selectedPlayer?.predictions?.mexico?.[match.id] || {};
-                      return (
-                        <MatchCard
-                          key={match.id}
-                          match={match}
-                          pred={pred}
-                          isAdmin={false}
-                          locked={isMatchLocked(match)}
-                          onScoreChange={(side, val) => handleScoreChange(match.id, side, val)}
-                          onAdjust={(side, d) => adjustScore(match.id, side, d)}
-                          onInterval={id => handleIntervalChange(match.id, id)}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
 
                 {/* ── Predicciones anteriores (fase de grupos) ─────────────────── */}
                 <div className="flex items-center gap-2 pt-2">
